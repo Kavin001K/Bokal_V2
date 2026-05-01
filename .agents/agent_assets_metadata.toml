@@ -1,0 +1,14 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "kii1RTfG-3LP3sM1Nynp_"
+uri = "file://artifacts/mobile/assets/images/icon.png"
+type = "image"
+title = "bookal app icon"
+
+[[generated]]
+id = "Rt4GEgNhaQurLAfn6kZgL"
+uri = "file://artifacts/mobile/assets/images/splash.png"
+type = "image"
+title = "bookal splash background"

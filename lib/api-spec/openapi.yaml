@@ -3,20 +3,33 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Bookal venue booking management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: bookings
+    description: Booking management
+  - name: venues
+    description: Venue management
+  - name: settings
+    description: App settings
+  - name: users
+    description: User management
+  - name: reports
+    description: Reports and analytics
+  - name: customers
+    description: Customer data
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,7 +37,480 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change own password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /bookings:
+    get:
+      operationId: getBookings
+      tags: [bookings]
+      summary: List bookings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingsListResponse"
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a new booking
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingRequest"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "409":
+          description: Booking conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictResponse"
+
+  /bookings/availability:
+    get:
+      operationId: checkAvailability
+      tags: [bookings]
+      summary: Check venue availability
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: venueId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: startTime
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: endTime
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: excludeBookingId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Availability result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityResponse"
+
+  /bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get booking by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Booking detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateBooking
+      tags: [bookings]
+      summary: Update a booking
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingRequest"
+      responses:
+        "200":
+          description: Updated booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+    delete:
+      operationId: cancelBooking
+      tags: [bookings]
+      summary: Cancel a booking
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+              required:
+                - reason
+      responses:
+        "200":
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /venues:
+    get:
+      operationId: getVenues
+      tags: [venues]
+      summary: Get all venues
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of venues
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Venue"
+
+  /venues/{id}/price:
+    put:
+      operationId: updateVenuePrice
+      tags: [venues]
+      summary: Update venue price
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pricePerHour:
+                  type: number
+              required:
+                - pricePerHour
+      responses:
+        "200":
+          description: Updated venue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Venue"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get all settings
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Settings object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsResponse"
+    put:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsResponse"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsResponse"
+
+  /users:
+    get:
+      operationId: getUsers
+      tags: [users]
+      summary: Get all users (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a new user (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /reports/summary:
+    get:
+      operationId: getReportSummary
+      tags: [reports]
+      summary: Get report summary (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Report summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportSummary"
+
+  /reports/export:
+    get:
+      operationId: exportReport
+      tags: [reports]
+      summary: Export report as CSV (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /customers/search:
+    get:
+      operationId: searchCustomers
+      tags: [customers]
+      summary: Search customers from past bookings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerSearchResult"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +520,476 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/AuthUser"
+      required:
+        - token
+        - user
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        mustChangePw:
+          type: boolean
+      required:
+        - id
+        - fullName
+        - email
+        - role
+        - mustChangePw
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+      required:
+        - newPassword
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        isActive:
+          type: boolean
+        mustChangePw:
+          type: boolean
+        createdAt:
+          type: string
+        lastLogin:
+          type: string
+          nullable: true
+      required:
+        - id
+        - fullName
+        - email
+        - role
+        - isActive
+        - mustChangePw
+        - createdAt
+
+    CreateUserRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+      required:
+        - fullName
+        - email
+        - password
+        - role
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        role:
+          type: string
+        isActive:
+          type: boolean
+
+    Venue:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        pricePerHour:
+          type: number
+        isActive:
+          type: boolean
+        displayOrder:
+          type: integer
+      required:
+        - id
+        - name
+        - type
+        - pricePerHour
+        - isActive
+        - displayOrder
+
+    BookingVenueItem:
+      type: object
+      properties:
+        venueId:
+          type: string
+        pricePerHour:
+          type: number
+      required:
+        - venueId
+        - pricePerHour
+
+    BookingVenueDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        venueId:
+          type: string
+        venueName:
+          type: string
+        venueType:
+          type: string
+        pricePerHour:
+          type: number
+        subtotal:
+          type: number
+      required:
+        - id
+        - venueId
+        - venueName
+        - venueType
+        - pricePerHour
+        - subtotal
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+        bookingRef:
+          type: string
+        customerName:
+          type: string
+        phoneNumbers:
+          type: array
+          items:
+            type: string
+        address:
+          type: string
+          nullable: true
+        idProofUrl:
+          type: string
+          nullable: true
+        bookingDate:
+          type: string
+        tamilDateLabel:
+          type: string
+          nullable: true
+        startTime:
+          type: string
+        endTime:
+          type: string
+        durationHours:
+          type: number
+        totalAmount:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        status:
+          type: string
+        createdById:
+          type: string
+        createdByName:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        cancelReason:
+          type: string
+          nullable: true
+        venues:
+          type: array
+          items:
+            $ref: "#/components/schemas/BookingVenueDetail"
+      required:
+        - id
+        - bookingRef
+        - customerName
+        - phoneNumbers
+        - bookingDate
+        - startTime
+        - endTime
+        - durationHours
+        - totalAmount
+        - status
+        - createdById
+        - createdByName
+        - createdAt
+        - updatedAt
+        - venues
+
+    BookingDetail:
+      allOf:
+        - $ref: "#/components/schemas/Booking"
+
+    CreateBookingRequest:
+      type: object
+      properties:
+        customerName:
+          type: string
+        phoneNumbers:
+          type: array
+          items:
+            type: string
+        address:
+          type: string
+          nullable: true
+        idProofUrl:
+          type: string
+          nullable: true
+        bookingDate:
+          type: string
+        tamilDateLabel:
+          type: string
+          nullable: true
+        startTime:
+          type: string
+        endTime:
+          type: string
+        venues:
+          type: array
+          items:
+            $ref: "#/components/schemas/BookingVenueItem"
+        notes:
+          type: string
+          nullable: true
+      required:
+        - customerName
+        - phoneNumbers
+        - bookingDate
+        - startTime
+        - endTime
+        - venues
+
+    BookingsListResponse:
+      type: object
+      properties:
+        bookings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Booking"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+        - bookings
+        - total
+        - page
+        - totalPages
+
+    AvailabilityResponse:
+      type: object
+      properties:
+        available:
+          type: boolean
+        conflict:
+          type: object
+          nullable: true
+          properties:
+            bookingRef:
+              type: string
+            customerName:
+              type: string
+            startTime:
+              type: string
+            endTime:
+              type: string
+          required:
+            - bookingRef
+            - customerName
+            - startTime
+            - endTime
+      required:
+        - available
+
+    ConflictResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        conflicts:
+          type: array
+          items:
+            type: object
+            properties:
+              venueName:
+                type: string
+              bookingRef:
+                type: string
+              customerName:
+                type: string
+              startTime:
+                type: string
+              endTime:
+                type: string
+            required:
+              - venueName
+              - bookingRef
+              - customerName
+              - startTime
+              - endTime
+      required:
+        - error
+
+    SettingsResponse:
+      type: object
+      properties:
+        default_duration_hours:
+          type: string
+        session_timeout_hours:
+          type: string
+        rules_pdf_path:
+          type: string
+      required:
+        - default_duration_hours
+        - session_timeout_hours
+        - rules_pdf_path
+
+    ReportSummary:
+      type: object
+      properties:
+        totalBookings:
+          type: integer
+        totalRevenue:
+          type: number
+        confirmedBookings:
+          type: integer
+        cancelledBookings:
+          type: integer
+        avgBookingValue:
+          type: number
+        byVenue:
+          type: array
+          items:
+            type: object
+            properties:
+              venueId:
+                type: string
+              venueName:
+                type: string
+              bookingCount:
+                type: integer
+              revenue:
+                type: number
+            required:
+              - venueId
+              - venueName
+              - bookingCount
+              - revenue
+        byDay:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              bookingCount:
+                type: integer
+              revenue:
+                type: number
+            required:
+              - date
+              - bookingCount
+              - revenue
+        byEmployee:
+          type: array
+          items:
+            type: object
+            properties:
+              userId:
+                type: string
+              userName:
+                type: string
+              bookingCount:
+                type: integer
+              revenue:
+                type: number
+            required:
+              - userId
+              - userName
+              - bookingCount
+              - revenue
+      required:
+        - totalBookings
+        - totalRevenue
+        - confirmedBookings
+        - cancelledBookings
+        - avgBookingValue
+        - byVenue
+        - byDay
+        - byEmployee
+
+    CustomerSearchResult:
+      type: object
+      properties:
+        customerName:
+          type: string
+        phoneNumbers:
+          type: array
+          items:
+            type: string
+        address:
+          type: string
+          nullable: true
+      required:
+        - customerName
+        - phoneNumbers
