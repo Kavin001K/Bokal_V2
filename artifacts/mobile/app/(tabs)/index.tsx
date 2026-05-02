@@ -123,8 +123,7 @@ export default function HomeScreen() {
       {/* Premium Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{bizName}</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
+          <Text style={[styles.headerSubtitle, { color: colors.textMuted, fontSize: 16, marginTop: 4 }]}>
             {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
           </Text>
         </View>
