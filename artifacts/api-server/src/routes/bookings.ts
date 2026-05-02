@@ -2,7 +2,7 @@ import { Router } from "express";
 import { eq, and, gte, lte, or, ilike, desc, sql, ne, inArray } from "drizzle-orm";
 import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable, auditLogsTable, bookingPdfsTable, settingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
-import { generatePremiumBookingPdf, mergePdfs } from "../lib/pdf-generator.js";
+import { generateBookingConfirmationPdf, mergePdfs } from "../lib/pdf-generator.js";
 import { logger } from "../lib/logger.js";
 import { uploadToBucket, downloadFromBucket } from "../lib/supabase-storage.js";
 import { firstString } from "../lib/express-utils.js";
@@ -101,7 +101,7 @@ async function generateAndStoreBookingPdf(id: string) {
       price: Number(v.subtotal).toLocaleString('en-IN')
     }));
 
-    const receiptPdf = await generatePremiumBookingPdf({
+    const receiptPdf = await generateBookingConfirmationPdf({
       bookingRef: b.bookingRef,
       customerName: b.customerName || "Customer",
       phones: Array.isArray(b.phoneNumbers) ? b.phoneNumbers.join(", ") : "",

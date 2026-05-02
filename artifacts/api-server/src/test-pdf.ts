@@ -1,4 +1,4 @@
-import { generatePremiumBookingPdf, BookingPdfData } from "./lib/pdf-generator.js";
+import { generateBookingConfirmationPdf, BookingPdfData } from "./lib/pdf-generator.js";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +28,7 @@ const testData: BookingPdfData = {
 
 async function run() {
   console.log("Generating test PDF...");
-  const pdfBytes = await generatePremiumBookingPdf(testData);
+  const pdfBytes = await generateBookingConfirmationPdf(testData);
   const outPath = path.resolve(__dirname, "../test-receipt.pdf");
   writeFileSync(outPath, pdfBytes);
   console.log("Test PDF saved to:", outPath);

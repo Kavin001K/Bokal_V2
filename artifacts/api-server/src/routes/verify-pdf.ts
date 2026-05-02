@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { generatePremiumBookingPdf, mergePdfs } from "../lib/pdf-generator.js";
+import { generateBookingConfirmationPdf, mergePdfs } from "../lib/pdf-generator.js";
 import { db, settingsTable, bookingsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { uploadToBucket, downloadFromBucket, getPublicUrl } from "../lib/supabase-storage.js";
@@ -37,7 +37,7 @@ router.get("/merged-verify", async (_req, res) => {
       }
     };
 
-    const receiptPdf = await generatePremiumBookingPdf(testData);
+    const receiptPdf = await generateBookingConfirmationPdf(testData);
 
     // Fetch actual rules from BUCKET
     const rulesSetting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_path")).limit(1);
