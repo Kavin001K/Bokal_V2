@@ -30,7 +30,7 @@ app.use(
 
 // --- PRODUCTION OPTIMIZATION ---
 app.use(cors({
-  origin: true, // In production, replace with your specific mobile/web domain for strict security
+  origin: "*", // Allow all origins for mobile app compatibility
   credentials: true,
 }));
 

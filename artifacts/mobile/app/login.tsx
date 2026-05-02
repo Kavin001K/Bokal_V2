@@ -115,10 +115,12 @@ export default function LoginScreen() {
         router.replace("/(tabs)");
       },
       onError: (err: any) => {
-        if (err.message && err.message.includes("Failed to fetch")) {
-          setError("Network error: Unable to connect to backend server");
+        const msg = err.message || "";
+        const targetUrl = err.url || "unknown URL";
+        if (msg.includes("Failed to fetch") || msg.includes("Network request failed")) {
+          setError(`Network error: Unable to connect to ${targetUrl}. Check your internet.`);
         } else {
-          setError(err?.data?.message ?? "Invalid email or password");
+          setError(err?.data?.message || err.message || "An unexpected error occurred");
         }
       },
     },
