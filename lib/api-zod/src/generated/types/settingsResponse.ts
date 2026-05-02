@@ -10,4 +10,10 @@ export interface SettingsResponse {
   default_duration_hours: string;
   session_timeout_hours: string;
   rules_pdf_path: string;
+  biz_name?: string | null;
+  biz_tagline?: string | null;
+  biz_address?: string | null;
+  biz_phone?: string | null;
+  biz_email?: string | null;
+  biz_gst?: string | null;
 }

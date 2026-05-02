@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/auth.js";
 import { generatePremiumBookingPdf, mergePdfs } from "../lib/pdf-generator.js";
 import { logger } from "../lib/logger.js";
 import { uploadToBucket, downloadFromBucket } from "../lib/supabase-storage.js";
+import { firstString } from "../lib/express-utils.js";
 
 // Escape LIKE special characters to prevent pattern injection
 function escapeLike(str: string): string {
@@ -100,7 +101,12 @@ async function formatBooking(b: typeof bookingsTable.$inferSelect, venues: Array
 }
 
 router.get("/bookings/availability", requireAuth, async (req, res) => {
-  const { venueId, date, startTime, endTime, excludeBookingId } = req.query as Record<string, string>;
+  const query = req.query as Record<string, string | string[]>;
+  const venueId = firstString(query.venueId);
+  const date = firstString(query.date);
+  const startTime = firstString(query.startTime);
+  const endTime = firstString(query.endTime);
+  const excludeBookingId = firstString(query.excludeBookingId);
 
   if (!venueId || !date || !startTime || !endTime) {
     res.status(400).json({ error: "Missing required params" });
@@ -148,7 +154,14 @@ router.get("/bookings/availability", requireAuth, async (req, res) => {
 });
 
 router.get("/bookings", requireAuth, async (req, res) => {
-  const { date, status, search, from, to, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const query = req.query as Record<string, string | string[]>;
+  const date = firstString(query.date);
+  const status = firstString(query.status);
+  const search = firstString(query.search);
+  const from = firstString(query.from);
+  const to = firstString(query.to);
+  const page = firstString(query.page) || "1";
+  const limit = firstString(query.limit) || "20";
   const pageNum = parseInt(page) || 1;
   const limitNum = Math.min(parseInt(limit) || 20, 100);
   const offset = (pageNum - 1) * limitNum;
@@ -230,7 +243,11 @@ router.get("/bookings", requireAuth, async (req, res) => {
 });
 
 router.get("/bookings/:id", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = firstString(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: "Bad Request", message: "Booking ID is required" });
+    return;
+  }
 
   const booking = await db
     .select()
@@ -392,7 +409,7 @@ router.post("/bookings", requireAuth, async (req, res) => {
 });
 
 router.put("/bookings/:id", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = firstString(req.params.id);
   const { customerName, phoneNumbers, address, idProofUrl, bookingDate, tamilDateLabel, startTime, endTime, venues, notes } =
     req.body as {
       customerName: string;
@@ -408,6 +425,11 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
       isPaid?: boolean;
       notes?: string;
     };
+
+  if (!id) {
+    res.status(400).json({ error: "Bad Request", message: "Booking ID is required" });
+    return;
+  }
 
   const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
   if (!existing[0]) {
@@ -468,9 +490,13 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
 });
 
 router.post("/bookings/:id/pay", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = firstString(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: "Bad Request", message: "Booking ID is required" });
+    return;
+  }
 
-  const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+  const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
   if (!existing[0]) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -490,8 +516,13 @@ router.post("/bookings/:id/pay", requireAuth, async (req, res) => {
 });
 
 router.delete("/bookings/:id", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = firstString(req.params.id);
   const { reason } = req.body as { reason: string };
+
+  if (!id) {
+    res.status(400).json({ error: "Bad Request", message: "Booking ID is required" });
+    return;
+  }
 
   if (!reason?.trim()) {
     res.status(400).json({ error: "Bad Request", message: "Cancellation reason is required" });
@@ -529,12 +560,22 @@ router.delete("/bookings/:id", requireAuth, async (req, res) => {
 // PDF generation endpoint — generates a professional 2-page PDF receipt
 // Supports token in query for direct browser downloads
 router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id = firstString(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: "Bad Request", message: "Booking ID is required" });
+    return;
+  }
 
   try {
     // Fetch booking data (try by UUID or by BookingRef)
-    let booking = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
-    if (!booking[0]) {
+    let booking = [];
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id!);
+
+    if (isUuid) {
+      booking = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+    }
+
+    if (booking.length === 0) {
       booking = await db.select().from(bookingsTable).where(eq(bookingsTable.bookingRef, id!)).limit(1);
     }
     
@@ -562,6 +603,7 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
       price: Number(v.subtotal).toLocaleString('en-IN')
     }));
 
+    console.log("!!! Starting PDF Generation for:", b.bookingRef);
     const receiptPdf = await generatePremiumBookingPdf({
       bookingRef: b.bookingRef,
       customerName: b.customerName || "Customer",
@@ -588,6 +630,7 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
         gst: settings["biz_gst"] || ""
       }
     });
+    console.log("!!! Receipt PDF Generated, size:", receiptPdf.length);
 
     // Try to merge with rules from bucket if available
     let finalPdf = receiptPdf;
@@ -595,10 +638,12 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
       const rulesSetting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_path")).limit(1);
       
       if (rulesSetting.length > 0 && rulesSetting[0]!.value) {
+        console.log("!!! Attempting to merge with rules:", rulesSetting[0]!.value);
         try {
           const rulesBuffer = await downloadFromBucket("pdfs", rulesSetting[0]!.value);
+          console.log("!!! Rules PDF downloaded, size:", rulesBuffer.length);
           finalPdf = await mergePdfs([receiptPdf, rulesBuffer]);
-          logger.info({ bookingId: b.id }, "Merged receipt with rules PDF from bucket");
+          console.log("!!! Merge successful, final size:", finalPdf.length);
         } catch (downloadErr) {
           logger.error({ err: downloadErr }, "Failed to download rules from bucket for merging, serving receipt only");
         }
@@ -631,6 +676,7 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
     res.setHeader("Content-Length", finalPdf.length);
     res.send(Buffer.from(finalPdf));
   } catch (err) {
+    console.error("!!! PDF GENERATION CRITICAL ERROR:", err);
     logger.error({ err, bookingId: id }, "PDF generation failed");
     res.status(500).json({ error: "Failed to generate PDF" });
   }

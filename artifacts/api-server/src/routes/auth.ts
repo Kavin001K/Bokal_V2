@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { signToken } from "../lib/auth.js";
+import { firstString } from "../lib/express-utils.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.js";
 
 const router = Router();
@@ -104,8 +105,13 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
 });
 
 router.post("/auth/reset-password/:userId", requireAdmin, async (req, res) => {
-  const { userId } = req.params;
+  const userId = firstString(req.params.userId);
   const { newPassword } = req.body as { newPassword?: string };
+
+  if (!userId) {
+    res.status(400).json({ error: "Bad Request", message: "User ID is required" });
+    return;
+  }
 
   if (!newPassword || newPassword.length < 6) {
     res.status(400).json({ error: "Bad Request", message: "New password must be at least 6 characters" });

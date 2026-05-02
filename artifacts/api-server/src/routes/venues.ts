@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, venuesTable } from "@workspace/db";
+import { firstString } from "../lib/express-utils.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.js";
 
 const router = Router();
@@ -25,8 +26,13 @@ router.get("/venues", requireAuth, async (req, res) => {
 });
 
 router.put("/venues/:id/price", requireAdmin, async (req, res) => {
-  const { id } = req.params;
+  const id = firstString(req.params.id);
   const { pricePerHour } = req.body as { pricePerHour: number };
+
+  if (!id) {
+    res.status(400).json({ error: "Bad Request", message: "Venue ID is required" });
+    return;
+  }
 
   if (pricePerHour === undefined || pricePerHour === null || pricePerHour < 0 || isNaN(pricePerHour)) {
     res.status(400).json({ error: "Invalid price" });

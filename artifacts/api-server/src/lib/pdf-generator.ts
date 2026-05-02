@@ -10,7 +10,6 @@ export interface BusinessInfo {
   address: string;
   phone: string;
   email: string;
-  email: string;
   gst: string;
 }
 

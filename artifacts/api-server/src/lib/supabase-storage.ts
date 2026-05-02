@@ -1,12 +1,17 @@
 import { logger } from "./logger.js";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
-// We need the SERVICE_ROLE_KEY for server-side uploads to bypass RLS
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-export async function uploadToBucket(bucket: string, path: string, buffer: Buffer, contentType = "application/pdf") {
+export async function uploadToBucket(bucket: string, path: string, buffer: Buffer | Uint8Array, contentType = "application/pdf") {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error("Supabase credentials missing in environment");
+    throw new Error(
+      "Supabase credentials missing in environment. Set EXPO_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+    );
+  }
+
+  if (buffer instanceof Uint8Array && !Buffer.isBuffer(buffer)) {
+    buffer = Buffer.from(buffer);
   }
 
   const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`;
@@ -32,7 +37,9 @@ export async function uploadToBucket(bucket: string, path: string, buffer: Buffe
 
 export async function downloadFromBucket(bucket: string, path: string): Promise<Buffer> {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error("Supabase credentials missing in environment");
+    throw new Error(
+      "Supabase credentials missing in environment. Set EXPO_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+    );
   }
 
   const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`;

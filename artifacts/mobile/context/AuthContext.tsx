@@ -39,11 +39,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const domain = process.env["EXPO_PUBLIC_DOMAIN"];
-    if (domain) {
-      const isLocal = domain.includes("localhost") || domain.includes("192.168.") || domain.includes("10.0.");
-      setBaseUrl(`${isLocal ? "http" : "https"}://${domain}`);
-    }
+    const rawDomain = process.env["EXPO_PUBLIC_DOMAIN"] || "localhost:3000";
+    const domain = rawDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    const isLocal =
+      domain.includes("localhost") ||
+      domain.includes("127.0.0.1") ||
+      domain.includes("192.168.") ||
+      domain.includes("10.0.");
+    setBaseUrl(`${isLocal ? "http" : "https"}://${domain}`);
   }, []);
 
   useEffect(() => {

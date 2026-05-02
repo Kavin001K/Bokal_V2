@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
+import { firstString } from "../lib/express-utils.js";
 import { requireAdmin } from "../middlewares/auth.js";
 
 const router = Router();
@@ -72,12 +73,17 @@ router.post("/users", requireAdmin, async (req, res) => {
 });
 
 router.put("/users/:id", requireAdmin, async (req, res) => {
-  const { id } = req.params;
+  const id = firstString(req.params.id);
   const { fullName, role, isActive } = req.body as {
     fullName?: string;
     role?: string;
     isActive?: boolean;
   };
+
+  if (!id) {
+    res.status(400).json({ error: "Bad Request", message: "User ID is required" });
+    return;
+  }
 
   const updates: Partial<typeof usersTable.$inferInsert> = {};
   if (fullName !== undefined) updates.fullName = fullName;

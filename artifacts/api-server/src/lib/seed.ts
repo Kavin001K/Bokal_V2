@@ -5,7 +5,7 @@ import { usersTable, venuesTable, settingsTable } from "@workspace/db/schema";
 import { logger } from "./logger.js";
 
 const DEFAULT_ADMIN_EMAIL = "admin@bookal.app";
-const DEFAULT_ADMIN_PASSWORD = "Admin@123";
+const DEFAULT_ADMIN_PASSWORD = process.env["DEFAULT_ADMIN_PASSWORD"] || "admin123";
 
 export async function seedIfEmpty() {
   try {
@@ -27,13 +27,25 @@ export async function seedIfEmpty() {
         mustChangePw: false,
       });
       logger.info("Admin user created");
-    } else if (!adminUser[0]!.isActive) {
-      logger.warn("Admin user exists but is inactive, activating...");
-      await db
-        .update(usersTable)
-        .set({ isActive: true })
-        .where(eq(usersTable.email, DEFAULT_ADMIN_EMAIL));
     } else {
+      if (!adminUser[0]!.isActive) {
+        logger.warn("Admin user exists but is inactive, activating...");
+        await db
+          .update(usersTable)
+          .set({ isActive: true })
+          .where(eq(usersTable.email, DEFAULT_ADMIN_EMAIL));
+      }
+
+      if (process.env["FORCE_ADMIN_PASSWORD_RESET"]?.toLowerCase() === "true") {
+        console.log("!!! FORCING ADMIN PASSWORD RESET TO:", DEFAULT_ADMIN_PASSWORD);
+        const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 12);
+        await db
+          .update(usersTable)
+          .set({ passwordHash, mustChangePw: false, isActive: true })
+          .where(eq(usersTable.email, DEFAULT_ADMIN_EMAIL));
+        console.log("!!! ADMIN PASSWORD RESET SUCCESSFUL");
+      }
+
       logger.info({ email: DEFAULT_ADMIN_EMAIL }, "Admin user already exists");
     }
 

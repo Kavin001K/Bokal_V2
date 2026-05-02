@@ -384,6 +384,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1 },
   card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
   venueRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  venueInfo: { flex: 1 },
   venueName: { fontSize: 16, fontWeight: "700" },
   venueType: { fontSize: 13 },
   priceEdit: { flexDirection: "row", alignItems: "center", gap: 4 },

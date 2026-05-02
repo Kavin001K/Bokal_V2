@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env["JWT_SECRET"];
+const JWT_SECRET = process.env["JWT_SECRET"] ?? "";
 if (!JWT_SECRET) {
   throw new Error("FATAL: JWT_SECRET environment variable is required. Server cannot start without it.");
 }
@@ -19,5 +19,9 @@ export function signToken(payload: JwtPayload): string {
 }
 
 export function verifyToken(token: string): JwtPayload {
-  return jwt.verify(token, JWT_SECRET) as JwtPayload;
+  const decoded = jwt.verify(token, JWT_SECRET as jwt.Secret);
+  if (typeof decoded !== "object" || decoded === null) {
+    throw new Error("Invalid token payload");
+  }
+  return decoded as JwtPayload;
 }

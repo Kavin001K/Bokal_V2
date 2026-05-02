@@ -111,7 +111,7 @@ export default function NewBookingScreen() {
 
   const { data: customerResults } = useSearchCustomers(
     { q: searchQuery },
-    { query: { enabled: searchQuery.length >= 2 } }
+    { query: { queryKey: ["search-customers", searchQuery], enabled: searchQuery.length >= 2 } }
   );
 
   const { data: bookingsData } = useGetBookings(
@@ -437,7 +437,7 @@ export default function NewBookingScreen() {
                     <Text style={[styles.phonePrefixText, { color: colors.textSecondary }]}>+91</Text>
                   </View>
                   <TextInput
-                    ref={(el) => (phoneRefs.current[idx] = el)}
+                    ref={(el) => { phoneRefs.current[idx] = el; }}
                     style={[styles.phoneInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.textPrimary }]}
                     placeholder="98765 43210"
                     placeholderTextColor={colors.textMuted}

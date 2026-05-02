@@ -6,6 +6,7 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import { ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -42,7 +43,7 @@ function getDateRange(preset: string, customFrom?: string, customTo?: string): {
   return { from: today, to: today };
 }
 
-import * as FileSystem from "expo-file-system/legacy";
+import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as WebBrowser from "expo-web-browser";
 
@@ -104,7 +105,7 @@ export default function ReportsScreen() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const domain = process.env["EXPO_PUBLIC_DOMAIN"] || "localhost:3000";
-      const isLocal = domain.includes("localhost") || domain.includes("192.168.") || domain.includes("10.0.");
+      const isLocal = domain.includes("localhost") || domain.includes("127.0.0.1") || domain.includes("192.168.") || domain.includes("10.0.");
       const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
       
       const pdfUrl = `${baseUrl}/api/reports/pdf?from=${from}&to=${to}&token=${token}`;

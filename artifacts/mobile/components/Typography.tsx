@@ -39,22 +39,24 @@ export function Text({ style, weight, ...props }: TextProps) {
   return <RNText {...props} style={[style, { fontFamily }]} />;
 }
 
-export function TextInput({ style, ...props }: RNTextInputProps) {
-  let fontFamily = "Inter_400Regular";
+export const TextInput = React.forwardRef<RNTextInput, RNTextInputProps>(
+  ({ style, ...props }, ref) => {
+    let fontFamily = "Inter_400Regular";
 
-  if (style) {
-    const flatStyle = StyleSheet.flatten(style);
-    if (flatStyle?.fontWeight) {
-      const fw = String(flatStyle.fontWeight);
-      if (fw === "bold" || fw === "700" || fw === "800" || fw === "900") {
-        fontFamily = "Inter_700Bold";
-      } else if (fw === "600") {
-        fontFamily = "Inter_600SemiBold";
-      } else if (fw === "500") {
-        fontFamily = "Inter_500Medium";
+    if (style) {
+      const flatStyle = StyleSheet.flatten(style);
+      if (flatStyle?.fontWeight) {
+        const fw = String(flatStyle.fontWeight);
+        if (fw === "bold" || fw === "700" || fw === "800" || fw === "900") {
+          fontFamily = "Inter_700Bold";
+        } else if (fw === "600") {
+          fontFamily = "Inter_600SemiBold";
+        } else if (fw === "500") {
+          fontFamily = "Inter_500Medium";
+        }
       }
     }
-  }
 
-  return <RNTextInput {...props} style={[style, { fontFamily }]} />;
-}
+    return <RNTextInput ref={ref} {...props} style={[style, { fontFamily }]} />;
+  }
+);
