@@ -6,18 +6,21 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator,
+import {
+  ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  
-  
-  View } from "react-native";
+  View,
+} from "react-native";
+
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
+
+const nativeDriver = Platform.OS !== "web";
 
 function TempleIcon({ size = 64 }: { size?: number }) {
   // A custom temple/venue icon built from View components
@@ -77,28 +80,29 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
 
   // Entrance animations
-  const logoAnim = useRef(new Animated.Value(0)).current;
-  const cardAnim = useRef(new Animated.Value(0)).current;
-  const cardSlide = useRef(new Animated.Value(30)).current;
+  const isWeb = Platform.OS === "web";
+  const logoAnim = useRef(new Animated.Value(isWeb ? 1 : 0)).current;
+  const cardAnim = useRef(new Animated.Value(isWeb ? 1 : 0)).current;
+  const cardSlide = useRef(new Animated.Value(isWeb ? 0 : 30)).current;
 
   useEffect(() => {
     Animated.sequence([
       Animated.timing(logoAnim, {
         toValue: 1,
         duration: 600,
-        useNativeDriver: true,
+        useNativeDriver: nativeDriver,
       }),
       Animated.parallel([
         Animated.timing(cardAnim, {
           toValue: 1,
           duration: 500,
-          useNativeDriver: true,
+          useNativeDriver: nativeDriver,
         }),
         Animated.spring(cardSlide, {
           toValue: 0,
           tension: 60,
           friction: 12,
-          useNativeDriver: true,
+          useNativeDriver: nativeDriver,
         }),
       ]),
     ]).start();

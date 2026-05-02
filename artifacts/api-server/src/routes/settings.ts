@@ -15,6 +15,12 @@ router.get("/settings", requireAdmin, async (req, res) => {
     default_duration_hours: obj["default_duration_hours"] ?? "4",
     session_timeout_hours: obj["session_timeout_hours"] ?? "24",
     rules_pdf_path: obj["rules_pdf_path"] ?? "",
+    biz_name: obj["biz_name"] ?? "",
+    biz_tagline: obj["biz_tagline"] ?? "",
+    biz_address: obj["biz_address"] ?? "",
+    biz_phone: obj["biz_phone"] ?? "",
+    biz_email: obj["biz_email"] ?? "",
+    biz_gst: obj["biz_gst"] ?? "",
   });
 });
 

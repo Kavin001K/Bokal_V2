@@ -21,7 +21,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#C75B2A"
-      }
+      },
+      "package": "app.bookal.mobile"
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -35,17 +36,8 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-updates"
+      "expo-document-picker"
     ],
-    "updates": {
-      "url": "https://u.expo.dev/dbwcgbnowoabwkztfmqi",
-      "enabled": true,
-      "checkOnLaunch": "ALWAYS",
-      "fallbackToCacheTimeout": 30000
-    },
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
