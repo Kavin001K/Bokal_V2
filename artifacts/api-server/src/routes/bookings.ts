@@ -561,7 +561,7 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
       price: Number(v.subtotal).toLocaleString('en-IN')
     }));
 
-    const pdfBytes = await generatePremiumBookingPdf({
+    const receiptPdf = await generatePremiumBookingPdf({
       bookingRef: b.bookingRef,
       customerName: b.customerName || "Customer",
       phones: Array.isArray(b.phoneNumbers) ? b.phoneNumbers.join(", ") : "",
@@ -579,22 +579,55 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
       createdBy: createdBy[0]?.fullName ?? "Staff",
       createdAt: (b.createdAt || new Date()).toISOString(),
       business: {
-        name: settings.biz_name || "Bookal Venue",
-        tagline: settings.biz_tagline || "Venue Booking Made Simple",
-        address: settings.biz_address || "Tamil Nadu, India",
-        phone: settings.biz_phone || "+91 98765 43210",
-        email: settings.biz_email || "contact@bookal.app",
-        gst: settings.biz_gst || ""
+        name: settings["biz_name"] || "Bookal",
+        tagline: settings["biz_tagline"] || "Venue Booking Made Simple",
+        address: settings["biz_address"] || "Tamil Nadu, India",
+        phone: settings["biz_phone"] || "+91 98765 43210",
+        email: settings["biz_email"] || "contact@bookal.app",
+        gst: settings["biz_gst"] || ""
       }
     });
 
-    const safeName = (b.customerName || "Customer").replace(/[^a-zA-Z0-9 ._-]/g, '').replace(/\s+/g, '_');
-    const fileName = `Receipt_${b.bookingRef}_${safeName}.pdf`;
+    // Check for rules PDF and merge if exists
+    let finalPdf = receiptPdf;
+    const rulesSetting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_data")).limit(1);
+    
+    if (rulesSetting.length > 0 && rulesSetting[0]!.value) {
+      try {
+        const { mergePdfs } = await import("../lib/pdf-generator.js");
+        const rulesPdf = Buffer.from(rulesSetting[0]!.value, "base64");
+        finalPdf = await mergePdfs([receiptPdf, rulesPdf]);
+        logger.info({ bookingId: b.id }, "Merged receipt with rules PDF");
+      } catch (mergeErr) {
+        logger.error({ err: mergeErr }, "Failed to merge rules PDF, serving receipt only");
+      }
+    }
+
+    // Save to database as "last generated" for persistence
+    try {
+      const b64 = Buffer.from(finalPdf).toString("base64");
+      const pdfFileName = `${b.customerName || "Customer"}'s Booking.pdf`;
+      
+      // Delete old PDF for this booking if exists to keep table clean
+      const { eq } = await import("drizzle-orm");
+      await db.delete(bookingPdfsTable).where(eq(bookingPdfsTable.bookingId, b.id));
+
+      await db.insert(bookingPdfsTable).values({
+        bookingId: b.id,
+        pdfData: b64,
+        fileName: pdfFileName,
+        fileSize: finalPdf.length,
+      });
+    } catch (saveErr) {
+      logger.error({ err: saveErr }, "Failed to save PDF to booking_pdfs table");
+    }
+
+    const pdfFileName = `${b.customerName || "Customer"}'s Booking.pdf`;
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    res.setHeader("Content-Length", pdfBytes.length);
-    res.send(Buffer.from(pdfBytes));
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(pdfFileName)}"`);
+    res.setHeader("Content-Length", finalPdf.length);
+    res.send(Buffer.from(finalPdf));
   } catch (err) {
     logger.error({ err, bookingId: id }, "PDF generation failed");
     res.status(500).json({ error: "Failed to generate PDF" });
