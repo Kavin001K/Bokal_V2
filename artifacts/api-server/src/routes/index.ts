@@ -7,6 +7,7 @@ import settingsRouter from "./settings.js";
 import usersRouter from "./users.js";
 import reportsRouter from "./reports.js";
 import customersRouter from "./customers.js";
+import testRouter from "./test.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(settingsRouter);
 router.use(usersRouter);
 router.use(reportsRouter);
 router.use(customersRouter);
+router.use("/test", testRouter);
 
 export default router;

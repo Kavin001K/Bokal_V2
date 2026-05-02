@@ -39,6 +39,7 @@ app.get("/", (_req, res) => {
       health: "/api/healthz",
       auth: "/api/auth",
       bookings: "/api/bookings",
+      test: "/api/test/pdf-test"
     },
   });
 });
