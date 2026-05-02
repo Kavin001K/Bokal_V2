@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, settingsTable } from "@workspace/db";
 import { requireAdmin } from "../middlewares/auth.js";
+import { uploadToBucket, getPublicUrl } from "../lib/supabase-storage.js";
 
 const router = Router();
 
@@ -60,46 +61,40 @@ router.post("/settings/rules-pdf", requireAdmin, async (req, res) => {
     return;
   }
 
-  // Remove data URI prefix if present
-  const base64 = pdfData.replace(/^data:application\/pdf;base64,/, "");
+  try {
+    const base64 = pdfData.replace(/^data:application\/pdf;base64,/, "");
+    const buffer = Buffer.from(base64, "base64");
+    const fileName = "venue_rules.pdf";
+    const path = `rules/${fileName}`;
 
-  await db
-    .insert(settingsTable)
-    .values({
-      key: "rules_pdf_data",
-      value: base64,
-    })
-    .onConflictDoUpdate({
-      target: settingsTable.key,
-      set: { value: base64, updatedAt: new Date() },
-    });
+    await uploadToBucket("pdfs", path, buffer);
 
-  // Also update the path setting to indicate a file is uploaded
-  await db
-    .insert(settingsTable)
-    .values({
-      key: "rules_pdf_path",
-      value: "rules_v2.pdf",
-    })
-    .onConflictDoUpdate({
-      target: settingsTable.key,
-      set: { value: "rules_v2.pdf", updatedAt: new Date() },
-    });
+    await db
+      .insert(settingsTable)
+      .values({
+        key: "rules_pdf_path",
+        value: path,
+      })
+      .onConflictDoUpdate({
+        target: settingsTable.key,
+        set: { value: path, updatedAt: new Date() },
+      });
 
-  res.json({ message: "Rules PDF uploaded successfully", rules_pdf_path: "rules_v2.pdf" });
+    res.json({ message: "Rules PDF uploaded to bucket successfully", rules_pdf_path: path });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to upload to storage", details: err.message });
+  }
 });
 
 router.get("/settings/rules-pdf", requireAdmin, async (req, res) => {
-  const setting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_data")).limit(1);
+  const setting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_path")).limit(1);
   if (!setting.length || !setting[0]!.value) {
     res.status(404).json({ message: "No rules PDF found" });
     return;
   }
 
-  const pdfBuffer = Buffer.from(setting[0]!.value, "base64");
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `inline; filename="rules_v2.pdf"`);
-  res.send(pdfBuffer);
+  const publicUrl = getPublicUrl("pdfs", setting[0]!.value);
+  res.redirect(publicUrl);
 });
 
 export default router;

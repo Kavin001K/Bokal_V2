@@ -81,8 +81,8 @@ export default function SettingsScreen() {
 
   const getBaseUrl = () => {
     const domain = process.env["EXPO_PUBLIC_DOMAIN"];
-    const isLocal = domain?.includes("localhost") || domain?.includes("192.168.") || domain?.includes("10.0.");
-    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "http://localhost:3000";
+    const isLocal = domain?.includes("localhost") || domain?.includes("127.0.0.1") || domain?.includes("192.168.") || domain?.includes("10.0.");
+    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "http://localhost:3001";
   };
 
   const handleUploadRulesPdf = async () => {

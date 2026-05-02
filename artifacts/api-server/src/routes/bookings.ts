@@ -2,8 +2,9 @@ import { Router } from "express";
 import { eq, and, gte, lte, or, ilike, desc, sql, ne, inArray } from "drizzle-orm";
 import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable, auditLogsTable, bookingPdfsTable, settingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
-import { generatePremiumBookingPdf } from "../lib/pdf-generator.js";
+import { generatePremiumBookingPdf, mergePdfs } from "../lib/pdf-generator.js";
 import { logger } from "../lib/logger.js";
+import { uploadToBucket, downloadFromBucket } from "../lib/supabase-storage.js";
 
 // Escape LIKE special characters to prevent pattern injection
 function escapeLike(str: string): string {
@@ -588,42 +589,43 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
       }
     });
 
-    // Check for rules PDF and merge if exists
+    // Try to merge with rules from bucket if available
     let finalPdf = receiptPdf;
-    const rulesSetting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_data")).limit(1);
-    
-    if (rulesSetting.length > 0 && rulesSetting[0]!.value) {
-      try {
-        const { mergePdfs } = await import("../lib/pdf-generator.js");
-        const rulesPdf = Buffer.from(rulesSetting[0]!.value, "base64");
-        finalPdf = await mergePdfs([receiptPdf, rulesPdf]);
-        logger.info({ bookingId: b.id }, "Merged receipt with rules PDF");
-      } catch (mergeErr) {
-        logger.error({ err: mergeErr }, "Failed to merge rules PDF, serving receipt only");
+    try {
+      const rulesSetting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_path")).limit(1);
+      
+      if (rulesSetting.length > 0 && rulesSetting[0]!.value) {
+        try {
+          const rulesBuffer = await downloadFromBucket("pdfs", rulesSetting[0]!.value);
+          finalPdf = await mergePdfs([receiptPdf, rulesBuffer]);
+          logger.info({ bookingId: b.id }, "Merged receipt with rules PDF from bucket");
+        } catch (downloadErr) {
+          logger.error({ err: downloadErr }, "Failed to download rules from bucket for merging, serving receipt only");
+        }
       }
+    } catch (dbErr) {
+      logger.error({ err: dbErr }, "Failed to fetch rules path from settingsTable");
     }
 
-    // Save to database as "last generated" for persistence
+    // Upload final PDF to bucket
+    const pdfFileName = `${b.customerName || "Customer"}'s Booking.pdf`;
+    const bucketPath = `bookings/${b.id}/${pdfFileName}`;
+    
     try {
-      const b64 = Buffer.from(finalPdf).toString("base64");
-      const pdfFileName = `${b.customerName || "Customer"}'s Booking.pdf`;
+      await uploadToBucket("pdfs", bucketPath, finalPdf);
       
-      // Delete old PDF for this booking if exists to keep table clean
-      const { eq } = await import("drizzle-orm");
+      // Update metadata in DB (store path in pdfData column)
       await db.delete(bookingPdfsTable).where(eq(bookingPdfsTable.bookingId, b.id));
-
       await db.insert(bookingPdfsTable).values({
         bookingId: b.id,
-        pdfData: b64,
+        pdfData: bucketPath,
         fileName: pdfFileName,
         fileSize: finalPdf.length,
       });
-    } catch (saveErr) {
-      logger.error({ err: saveErr }, "Failed to save PDF to booking_pdfs table");
+      logger.info({ bookingId: b.id, path: bucketPath }, "Saved booking PDF to storage bucket");
+    } catch (uploadErr) {
+      logger.error({ err: uploadErr }, "Failed to upload generated PDF to bucket");
     }
-
-    const pdfFileName = `${b.customerName || "Customer"}'s Booking.pdf`;
-
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(pdfFileName)}"`);
     res.setHeader("Content-Length", finalPdf.length);
