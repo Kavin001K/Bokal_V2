@@ -320,45 +320,61 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
     // --- 5. TOTALS BLOCK ---
     y -= 90;
     page1.drawRectangle({ x: margin, y, width: width - margin * 2, height: 100, color: BG_LIGHT, borderColor: BORDER, borderWidth: 1.2, borderRadius: 12 });
-    page1.drawCircle({ x: rightEdge - 30, y: y + 25, size: 45, borderColor: ACCENT, borderWidth: 0.3, opacity: 0.15 });
-
-    page1.drawText("GRAND TOTAL", { x: margin + 25, y: y + 68, size: 18, font: bold, color: TEXT_DARK });
     
-    drawSectionIcon(page1, "document", margin + 42, y + 35, BORDER);
-    page1.drawText("Advance Paid:", { x: margin + 70, y: y + 42, size: 11, font: regular, color: TEXT_MUTED });
-    page1.drawText(`Rs. ${data.advanceAmount}`, { x: margin + 70, y: y + 24, size: 14, font: bold, color: TEXT_DARK });
+    // Subtle background decoration
+    page1.drawCircle({ x: rightEdge - 20, y: y + 20, size: 50, borderColor: ACCENT, borderWidth: 0.25, opacity: 0.1 });
 
-    drawLine(page1, margin + 250, y + 18, margin + 250, y + 82, 1.2, BORDER);
+    page1.drawText("GRAND TOTAL", { x: margin + 30, y: y + 72, size: 16, font: bold, color: TEXT_DARK });
+    
+    // Advance Paid Section
+    const advX = margin + 30;
+    const advY = y + 28;
+    page1.drawCircle({ x: advX + 15, y: advY + 15, size: 18, color: WHITE, borderColor: BORDER, borderWidth: 0.5 });
+    drawIcon(page1, "document", advX + 15, advY + 15, 12, ACCENT);
+    
+    page1.drawText("Advance Paid:", { x: advX + 45, y: advY + 22, size: 10, font: regular, color: TEXT_MUTED });
+    page1.drawText(`Rs. ${data.advanceAmount}`, { x: advX + 45, y: advY + 5, size: 14, font: bold, color: TEXT_DARK });
 
+    // Vertical Divider
+    drawLine(page1, margin + 220, y + 15, margin + 220, y + 85, 1, BORDER);
+
+    // Total Amount (Right-aligned)
     const grandTotal = `Rs. ${data.totalAmount}`;
-    const gtW = bold.widthOfTextAtSize(grandTotal, 42);
-    page1.drawText(grandTotal, { x: rightEdge - gtW - 25, y: y + 50, size: 42, font: bold, color: PRIMARY });
+    const gtSize = 42;
+    const gtW = bold.widthOfTextAtSize(grandTotal, gtSize);
+    page1.drawText(grandTotal, { x: rightEdge - gtW - 25, y: y + 48, size: gtSize, font: bold, color: PRIMARY });
 
     if (data.isPaid) {
+      const statusLabel = "PAYMENT STATUS";
+      const slW = regular.widthOfTextAtSize(statusLabel, 10);
+      const rightColMid = (margin + 220 + rightEdge) / 2;
+      
+      page1.drawText(statusLabel, { x: rightEdge - slW - 25, y: y + 30, size: 10, font: regular, color: TEXT_DARK });
+
       const statusText = "FULLY PAID";
       const stW = bold.widthOfTextAtSize(statusText, 11);
       const pillW = stW + 35;
       const pillX = rightEdge - pillW - 25;
-      page1.drawRectangle({ x: pillX, y: y + 18, width: pillW, height: 24, color: rgb(0.2, 0.7, 0.2), borderRadius: 12 });
+      const pillY = y + 10;
       
-      const checkX = pillX + 14;
-      const checkY = y + 30;
-      page1.drawLine({ start: { x: checkX - 5, y: checkY }, end: { x: checkX - 1, y: checkY - 4 }, thickness: 1.8, color: WHITE });
-      page1.drawLine({ start: { x: checkX - 1, y: checkY - 4 }, end: { x: checkX + 5, y: checkY + 5 }, thickness: 1.8, color: WHITE });
+      page1.drawRectangle({ x: pillX, y: pillY, width: pillW, height: 20, borderColor: rgb(0.1, 0.6, 0.2), borderWidth: 1.5, borderRadius: 10 });
       
-      page1.drawText(statusText, { x: pillX + 25, y: y + 26, size: 11, font: bold, color: WHITE });
-      page1.drawText("PAYMENT STATUS", { x: pillX + 5, y: y + 45, size: 10, font: regular, color: TEXT_MUTED });
+      const checkX = pillX + 12;
+      const checkY = pillY + 10;
+      page1.drawLine({ start: { x: checkX - 4, y: checkY }, end: { x: checkX - 1, y: checkY - 3 }, thickness: 1.8, color: rgb(0.1, 0.6, 0.2) });
+      page1.drawLine({ start: { x: checkX - 1, y: checkY - 3 }, end: { x: checkX + 4, y: checkY + 4 }, thickness: 1.8, color: rgb(0.1, 0.6, 0.2) });
+      
+      page1.drawText(statusText, { x: pillX + 22, y: pillY + 6, size: 11, font: bold, color: rgb(0.1, 0.6, 0.2) });
     }
 
     // --- 6. SIGNATURES ---
     y -= 100;
     const sigLineW = 180;
-    page1.drawText(cleanText(data.customerName), { x: margin + 50, y: y + 30, size: 20, font: regular, color: TEXT_DARK });
+    // Names removed as per user request for manual signing
     drawLine(page1, margin, y + 20, margin + sigLineW, y + 20, 1, TEXT_DARK);
     page1.drawText("Customer Signature", { x: margin + 45, y: y + 5, size: 10, font: regular, color: TEXT_MUTED });
 
     const authX = rightEdge - sigLineW;
-    page1.drawText("Bookal", { x: authX + 60, y: y + 30, size: 20, font: regular, color: TEXT_DARK });
     drawLine(page1, authX, y + 20, rightEdge, y + 20, 1, TEXT_DARK);
     page1.drawText("Authorized Signature & Stamp", { x: authX + 20, y: y + 5, size: 10, font: regular, color: TEXT_MUTED });
 
