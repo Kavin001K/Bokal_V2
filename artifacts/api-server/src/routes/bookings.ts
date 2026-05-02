@@ -506,6 +506,7 @@ router.post("/bookings/:id/pay", requireAuth, async (req, res) => {
     .update(bookingsTable)
     .set({
       isPaid: true,
+      advanceAmount: existing[0]!.totalAmount,
       updatedAt: new Date(),
     })
     .where(eq(bookingsTable.id, id!));

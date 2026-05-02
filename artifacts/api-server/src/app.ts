@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
@@ -26,8 +27,18 @@ app.use(
     },
   }),
 );
-app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+
+// --- PRODUCTION OPTIMIZATION ---
+app.use(cors({
+  origin: true, // In production, replace with your specific mobile/web domain for strict security
+  credentials: true,
+}));
+
+app.use(cookieParser());
+app.use(express.json({ limit: "50mb" }));
+
+// Render Health Check
+app.get("/health", (req, res) => res.status(200).send("OK"));
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (_req, res) => {

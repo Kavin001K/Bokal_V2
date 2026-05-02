@@ -373,10 +373,7 @@ const styles = StyleSheet.create({
   heroCard: {
     borderRadius: 28,
     padding: 24,
-    shadowColor: '#C75B2A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
+    boxShadow: '0px 10px 15px rgba(199, 91, 42, 0.3)',
     elevation: 8,
   },
   heroContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -428,10 +425,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    boxShadow: '0px 5px 10px rgba(0, 0, 0, 0.3)',
     elevation: 8,
   },
   profileMenu: {

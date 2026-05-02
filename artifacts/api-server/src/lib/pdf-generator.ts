@@ -62,18 +62,23 @@ function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number,
   });
 }
 
-function cleanText(val: any): string {
-  if (val === null || val === undefined) return "";
-  // Strip ALL non-ASCII and ALL control characters (like newlines) to prevent PDF-lib crashes
-  return String(val)
-    .replace(/[^\x20-\x7E]/g, "") // Keep only printable ASCII (space to tilde)
-    .trim();
-}
+function wrapText(text: string, maxWidth: number, font: PDFFont, fontSize: number): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let currentLine = "";
 
-function drawLabelValue(page: PDFPage, label: string, value: string, x: number, y: number, regular: PDFFont, bold: PDFFont) {
-  const cleanedVal = cleanText(value) || "-";
-  page.drawText(label, { x, y, size: 9, font: regular, color: TEXT_MUTED });
-  page.drawText(cleanedVal, { x: x + 110, y, size: 9.5, font: bold, color: TEXT_DARK });
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    const width = font.widthOfTextAtSize(testLine, fontSize);
+    if (width <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines;
 }
 
 export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<Uint8Array> {
@@ -87,62 +92,105 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
     const biz = data.business || {
       name: "BOOKAL",
       tagline: "Professional Venue Management",
-      address: "Tamil Nadu, India",
-      phone: "",
-      email: ""
+      address: "1/85 Zamin Kottampatti, Pollachi, TN 642123",
+      phone: "+91 88257 02072",
+      email: "bookings@bookal.app",
+      gst: ""
     };
 
     const margin = 45;
     const rightEdge = width - margin;
 
-    // --- HEADER BLOCK ---
-    page1.drawRectangle({ x: 0, y: height - 90, width, height: 90, color: PRIMARY });
+    // --- HEADER: PREMIUM BRANDING ---
+    page1.drawRectangle({ x: 0, y: height - 120, width, height: 120, color: PRIMARY });
 
-    const titleLabel = cleanText(biz.name);
-    page1.drawText(titleLabel, {
-      x: margin, y: height - 40, size: 24, font: bold, color: WHITE,
+    // Left side: Logo/Name
+    page1.drawText(cleanText(biz.name), {
+      x: margin, y: height - 50, size: 26, font: bold, color: WHITE,
     });
-    const taglineLabel = cleanText(biz.tagline);
-    page1.drawText(taglineLabel, {
-      x: margin, y: height - 55, size: 10, font: regular, color: WHITE,
+    page1.drawText(cleanText(biz.tagline), {
+      x: margin, y: height - 68, size: 11, font: regular, color: WHITE,
     });
     
-    const refW = bold.widthOfTextAtSize(data.bookingRef, 12);
-    page1.drawText(`Ref: ${data.bookingRef}`, {
-      x: rightEdge - refW - 30, y: height - 40, size: 12, font: bold, color: WHITE,
+    // Right side: Business Contact Info
+    let bizY = height - 40;
+    const bizFontSize = 8.5;
+    const bizTextX = width / 2 + 30;
+
+    const drawBizInfo = (text: string, icon: string = "") => {
+      if (!text) return;
+      page1.drawText(cleanText(text), {
+        x: bizTextX, y: bizY, size: bizFontSize, font: regular, color: WHITE,
+      });
+      bizY -= 14;
+    };
+
+    drawBizInfo(biz.address);
+    drawBizInfo(`P: ${biz.phone} | E: ${biz.email}`);
+    if (biz.gst) drawBizInfo(`GST: ${biz.gst}`);
+    
+    // Reference Badge
+    page1.drawRectangle({ x: rightEdge - 140, y: height - 105, width: 140, height: 24, color: WHITE, opacity: 0.15 });
+    page1.drawText(`REF: ${data.bookingRef}`, {
+      x: rightEdge - 130, y: height - 98, size: 11, font: bold, color: WHITE,
     });
 
-    // --- SECTION: BOOKING RECEIPT ---
-    let y = height - 120;
-    page1.drawText("BOOKING RECEIPT", { x: margin, y, size: 16, font: bold, color: PRIMARY });
-    y -= 10;
-    drawLine(page1, margin, y, rightEdge, y, 0.5);
+    // --- SECTION: BOOKING RECEIPT TITLE ---
+    let y = height - 150;
+    page1.drawText("BOOKING RECEIPT", { x: margin, y, size: 18, font: bold, color: PRIMARY });
+    y -= 12;
+    drawLine(page1, margin, y, rightEdge, y, 1);
     
-    // Grid layout
+    // --- GRID: CLIENT & EVENT INFO ---
+    y -= 35;
     const col2X = width / 2 + 10;
-    let y2 = y - 25;
+    const sectionTitleSize = 9;
+    const infoLabelSize = 9;
+    const infoValueSize = 10;
     
-    page1.drawText("CLIENT INFORMATION", { x: margin, y: y2, size: 9, font: bold, color: PRIMARY });
-    page1.drawText("EVENT SCHEDULE", { x: col2X, y: y2, size: 9, font: bold, color: PRIMARY });
-    y2 -= 20;
+    page1.drawText("CLIENT INFORMATION", { x: margin, y, size: sectionTitleSize, font: bold, color: PRIMARY });
+    page1.drawText("EVENT SCHEDULE", { x: col2X, y: sectionTitleSize, y, size: sectionTitleSize, font: bold, color: PRIMARY });
+    y -= 25;
     
-    drawLabelValue(page1, "Customer Name", data.customerName, margin, y2, regular, bold);
-    drawLabelValue(page1, "Date", data.bookingDate, col2X, y2, regular, bold);
-    y2 -= 18;
+    // Customer Name
+    page1.drawText("Customer Name", { x: margin, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
+    page1.drawText(cleanText(data.customerName), { x: margin + 90, y, size: infoValueSize, font: bold, color: TEXT_DARK });
     
-    drawLabelValue(page1, "Phone", data.phones, margin, y2, regular, bold);
-    drawLabelValue(page1, "Tamil Date", data.tamilDate, col2X, y2, regular, bold);
-    y2 -= 18;
+    // Date
+    page1.drawText("Date", { x: col2X, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
+    page1.drawText(cleanText(data.bookingDate), { x: col2X + 80, y, size: infoValueSize, font: bold, color: TEXT_DARK });
+    y -= 20;
+
+    // Phone
+    page1.drawText("Phone", { x: margin, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
+    page1.drawText(cleanText(data.phones), { x: margin + 90, y, size: infoValueSize, font: bold, color: TEXT_DARK });
     
-    drawLabelValue(page1, "Address", data.address, margin, y2, regular, bold);
-    drawLabelValue(page1, "Time", `${data.startTime} - ${data.endTime}`, col2X, y2, regular, bold);
-    y2 -= 18;
-    drawLabelValue(page1, "Duration", `${data.duration} hours`, col2X, y2, regular, bold);
+    // Tamil Date
+    page1.drawText("Tamil Date", { x: col2X, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
+    page1.drawText(cleanText(data.tamilDate), { x: col2X + 80, y, size: infoValueSize, font: bold, color: TEXT_DARK });
+    y -= 20;
+
+    // Address (with Wrapping)
+    page1.drawText("Address", { x: margin, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
+    const addrLines = wrapText(data.address, 180, regular, infoValueSize);
+    let addrY = y;
+    addrLines.forEach(line => {
+      page1.drawText(cleanText(line), { x: margin + 90, y: addrY, size: infoValueSize, font: bold, color: TEXT_DARK });
+      addrY -= 14;
+    });
+
+    // Time & Duration
+    page1.drawText("Time", { x: col2X, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
+    page1.drawText(`${data.startTime} - ${data.endTime}`, { x: col2X + 80, y, size: infoValueSize, font: bold, color: TEXT_DARK });
+    y -= 20;
+    page1.drawText("Duration", { x: col2X, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
+    page1.drawText(`${data.duration} hours`, { x: col2X + 80, y, size: infoValueSize, font: bold, color: TEXT_DARK });
     
-    y = y2 - 30;
+    // Adjust y based on address lines
+    y = Math.min(y - 20, addrY - 15);
     
     // --- VENUES & PRICING ---
-    page1.drawText("VENUE & PRICING", { x: margin, y, size: 9, font: bold, color: PRIMARY });
+    page1.drawText("VENUE & PRICING", { x: margin, y, size: sectionTitleSize, font: bold, color: PRIMARY });
     y -= 10;
     drawLine(page1, margin, y, rightEdge, y, 0.5);
     y -= 18;
@@ -155,10 +203,10 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
     y -= 20;
 
     for (const venue of data.venues) {
-      page1.drawText(cleanText(venue.name), { x: margin, y, size: 9.5, font: regular, color: TEXT_DARK });
+      page1.drawText(cleanText(venue.name), { x: margin, y, size: 10, font: regular, color: TEXT_DARK });
       const subtotal = `Rs. ${venue.price}`;
-      const priceW = bold.widthOfTextAtSize(subtotal, 9.5);
-      page1.drawText(subtotal, { x: rightEdge - priceW, y, size: 9.5, font: bold, color: TEXT_DARK });
+      const priceW = bold.widthOfTextAtSize(subtotal, 10);
+      page1.drawText(subtotal, { x: rightEdge - priceW, y, size: 10, font: bold, color: TEXT_DARK });
       y -= 18;
     }
 
@@ -166,98 +214,72 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
     drawLine(page1, margin, y, rightEdge, y, 0.5);
     y -= 25;
 
-    // Totals
+    // Totals Section
     const totalLabel = "GRAND TOTAL";
-    const totalW = bold.widthOfTextAtSize(totalLabel, 15);
     page1.drawText(totalLabel, { x: margin, y, size: 15, font: bold, color: TEXT_DARK });
-    
     const totalVal = `Rs. ${data.totalAmount}`;
-    const totalValW = bold.widthOfTextAtSize(totalVal, 15);
-    page1.drawText(totalVal, { x: rightEdge - totalValW, y, size: 15, font: bold, color: PRIMARY });
+    const totalValW = bold.widthOfTextAtSize(totalVal, 16);
+    page1.drawText(totalVal, { x: rightEdge - totalValW, y, size: 16, font: bold, color: PRIMARY });
     
     y -= 22;
+    page1.drawText("Advance Paid:", { x: margin, y, size: 10, font: regular, color: TEXT_MUTED });
     const advVal = `Rs. ${data.advanceAmount}`;
-    const advValW = regular.widthOfTextAtSize(advVal, 9.5);
-    page1.drawText("Advance Paid:", { x: margin, y, size: 9.5, font: regular, color: TEXT_MUTED });
-    page1.drawText(advVal, { x: rightEdge - advValW, y, size: 9.5, font: bold, color: TEXT_DARK });
+    const advValW = bold.widthOfTextAtSize(advVal, 10);
+    page1.drawText(advVal, { x: rightEdge - advValW, y, size: 10, font: bold, color: TEXT_DARK });
     
     y -= 20;
     const totalNum = parseFloat(String(data.totalAmount).replace(/,/g, '')) || 0;
     const advNum = parseFloat(String(data.advanceAmount).replace(/,/g, '')) || 0;
     const balDue = `Rs. ${(totalNum - advNum).toLocaleString('en-IN')}`;
-    const balDueW = bold.widthOfTextAtSize(balDue, 15);
+    const balDueW = bold.widthOfTextAtSize(balDue, 16);
     
-    page1.drawText("BALANCE DUE:", { x: margin, y, size: 11, font: bold, color: TEXT_DARK });
-    page1.drawText(balDue, { x: rightEdge - balDueW, y, size: 15, font: bold, color: PRIMARY });
+    page1.drawText(data.isPaid ? "PAYMENT STATUS:" : "BALANCE DUE:", { x: margin, y, size: 11, font: bold, color: TEXT_DARK });
+    page1.drawText(data.isPaid ? "FULLY PAID" : balDue, { x: rightEdge - balDueW, y, size: 16, font: bold, color: data.isPaid ? rgb(0.1, 0.6, 0.1) : PRIMARY });
 
     // --- NOTES ---
-    y -= 35;
     if (data.notes) {
+      y -= 35;
       page1.drawText("NOTES", { x: margin, y, size: 9, font: bold, color: PRIMARY });
       y -= 16;
-      
-      const rawNotes = String(data.notes).split(/[\r\n]+/);
-      for (const rawLine of rawNotes) {
-        let remaining = cleanText(rawLine);
-        const maxChars = 80;
-        while (remaining.length > 0) {
-          let chunk = remaining.substring(0, maxChars);
-          if (remaining.length > maxChars) {
-            let breakAt = chunk.lastIndexOf(" ");
-            if (breakAt > 20) {
-              chunk = remaining.substring(0, breakAt);
-              remaining = remaining.substring(breakAt + 1);
-            } else {
-              remaining = remaining.substring(maxChars);
-            }
-          } else {
-            remaining = "";
-          }
-          page1.drawText(chunk, { x: margin, y, size: 9, font: regular, color: TEXT_DARK });
-          y -= 14;
-          if (y < 100) break;
-        }
-      }
+      const notesLines = wrapText(data.notes, 480, regular, 9);
+      notesLines.forEach(line => {
+        page1.drawText(cleanText(line), { x: margin, y, size: 9, font: regular, color: TEXT_DARK });
+        y -= 13;
+      });
     }
 
+    // --- SIGNATURE SECTION (BOTTOM) ---
+    const sigY = 120;
+    drawLine(page1, margin, sigY, rightEdge, sigY, 0.5);
+    
+    // Customer Sig
+    const sigLineY = sigY - 60;
+    drawLine(page1, margin, sigLineY, margin + 180, sigLineY, 0.5);
+    page1.drawText("Customer Signature", { x: margin + 35, y: sigLineY - 14, size: 8, font: regular, color: TEXT_MUTED });
+    
+    // Authorized Sig
+    drawLine(page1, rightEdge - 180, sigLineY, rightEdge, sigLineY, 0.5);
+    page1.drawText("Authorized Signature & Stamp", { x: rightEdge - 165, y: sigLineY - 14, size: 8, font: regular, color: TEXT_MUTED });
+
     // --- FOOTER ---
-    const footerY = 85;
-    drawLine(page1, margin, footerY + 20, rightEdge, footerY + 20, 0.5);
-
+    const footerY = 25;
     page1.drawText(cleanText(`Booked by: ${data.createdBy}  |  Created: ${data.createdAt.split('T')[0]}`), {
-      x: margin, y: footerY + 6, size: 7.5, font: regular, color: TEXT_MUTED,
+      x: margin, y: footerY, size: 7.5, font: regular, color: TEXT_MUTED,
     });
-    page1.drawText(cleanText(biz.address), {
-      x: margin, y: footerY - 8, size: 7.5, font: regular, color: TEXT_MUTED,
-    });
-    page1.drawText(cleanText(`P: ${biz.phone} | E: ${biz.email}`), {
-      x: margin, y: footerY - 20, size: 7.5, font: regular, color: TEXT_MUTED,
-    });
-
-    // --- SIGNATURE LINES ---
-    const sigY = 48;
-    drawLine(page1, margin, sigY, margin + 160, sigY, 0.5);
-    page1.drawText("Customer Signature", {
-      x: margin + 30, y: sigY - 14, size: 7.5, font: regular, color: TEXT_MUTED,
-    });
-    drawLine(page1, rightEdge - 160, sigY, rightEdge, sigY, 0.5);
-    page1.drawText("Authorized Signature & Stamp", {
-      x: rightEdge - 155, y: sigY - 14, size: 7.5, font: regular, color: TEXT_MUTED,
-    });
+    const siteLabel = "Generated by Bookal Management System";
+    const siteW = regular.widthOfTextAtSize(siteLabel, 7.5);
+    page1.drawText(siteLabel, { x: rightEdge - siteW, y: footerY, size: 7.5, font: regular, color: TEXT_MUTED });
 
     return pdfDoc.save();
   } catch (err) {
-    console.error("Premium PDF Error, falling back:", err);
-    // FALLBACK: Minimalist PDF that is guaranteed to work
+    console.error("Premium PDF Error:", err);
+    // Safe Fallback
     const doc = await PDFDocument.create();
     const font = await doc.embedFont(StandardFonts.Helvetica);
     const p = doc.addPage([595, 842]);
-    p.drawText("BOOKAL BOOKING RECEIPT", { x: 50, y: 800, size: 20, font });
+    p.drawText("BOOKAL BOOKING RECEIPT (RECOVERY MODE)", { x: 50, y: 800, size: 16, font });
     p.drawText(`Ref: ${data.bookingRef}`, { x: 50, y: 770, size: 12, font });
     p.drawText(`Customer: ${cleanText(data.customerName)}`, { x: 50, y: 750, size: 12, font });
-    p.drawText(`Date: ${data.bookingDate}`, { x: 50, y: 730, size: 12, font });
-    p.drawText(`Total: Rs. ${data.totalAmount}`, { x: 50, y: 710, size: 12, font });
-    p.drawText("Receipt generated in safe mode due to data processing error.", { x: 50, y: 100, size: 8, font });
     return doc.save();
   }
 }

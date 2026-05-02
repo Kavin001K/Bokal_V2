@@ -5,7 +5,7 @@ import { usersTable, venuesTable, settingsTable } from "@workspace/db/schema";
 import { logger } from "./logger.js";
 
 const DEFAULT_ADMIN_EMAIL = "admin@bookal.app";
-const DEFAULT_ADMIN_PASSWORD = process.env["DEFAULT_ADMIN_PASSWORD"] || "admin123";
+const DEFAULT_ADMIN_PASSWORD = process.env["DEFAULT_ADMIN_PASSWORD"] || "Bookal@2026";
 
 export async function seedIfEmpty() {
   try {

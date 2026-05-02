@@ -46,6 +46,7 @@ function getDateRange(preset: string, customFrom?: string, customTo?: string): {
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as WebBrowser from "expo-web-browser";
+import { generateExcelReport, downloadExcelFile } from "@/utils/excelExport";
 
 export default function ReportsScreen() {
   const colors = useColors();
@@ -85,18 +86,31 @@ export default function ReportsScreen() {
     { key: "custom", label: "Custom" },
   ];
 
-  const exportToCSV = async () => {
+  const exportToExcel = async () => {
     if (!summary || !bookingsData) return;
     try {
-      const header = "Booking Ref,Customer,Phone,Date,Start,End,Amount,Status\n";
-      const rows = bookingsData.bookings.map((b: any) => 
-        `"${b.bookingRef}","${b.customerName}","${b.phoneNumbers?.[0]||""}","${b.bookingDate}","${b.startTime}","${b.endTime}","${b.totalAmount}","${b.status}"`
-      ).join("\n");
-      const fileUri = FileSystem.documentDirectory + `Bookal_Report_${from}_to_${to}.csv`;
-      await FileSystem.writeAsStringAsync(fileUri, header + rows);
-      await Sharing.shareAsync(fileUri, { UTI: 'public.comma-separated-values-text', dialogTitle: 'Export CSV' });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const xml = generateExcelReport({
+        from,
+        to,
+        summary: {
+          totalBookings: summary.totalBookings,
+          totalRevenue: Number(summary.totalRevenue),
+          avgBookingValue: summary.avgBookingValue,
+          confirmedBookings: summary.confirmedBookings,
+          cancelledBookings: summary.cancelledBookings,
+        },
+        bookings: bookingsData.bookings,
+      });
+
+      const filename = `Bookal_Report_${from}_to_${to}.xls`;
+      
+      // Use modern web download
+      downloadExcelFile(xml, filename);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       console.error(e);
+      Alert.alert("Error", "Could not generate Excel report.");
     }
   };
 
@@ -183,10 +197,10 @@ export default function ReportsScreen() {
         <View style={styles.exportRow}>
           <Pressable
             style={[styles.exportBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-            onPress={exportToCSV}
+            onPress={exportToExcel}
           >
             <Feather name="file-text" size={16} color={colors.textPrimary} />
-            <Text style={[styles.exportBtnText, { color: colors.textPrimary }]}>Export CSV</Text>
+            <Text style={[styles.exportBtnText, { color: colors.textPrimary }]}>Export Excel</Text>
           </Pressable>
           <Pressable
             style={[styles.exportBtn, { backgroundColor: colors.primary }]}
@@ -347,11 +361,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     gap: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 2,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
   },
   statValue: { fontSize: 20, fontWeight: "800" as const },
   statLabel: { fontSize: 11, textAlign: "center" },
