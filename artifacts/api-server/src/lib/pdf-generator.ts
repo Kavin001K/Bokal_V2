@@ -63,15 +63,18 @@ function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number,
   });
 }
 
-function cleanText(str: string): string {
-  if (!str) return "";
-  // Strip non-ASCII to prevent PDF-lib standard font crashes
-  return str.replace(/[^\x00-\x7F]/g, "");
+function cleanText(val: any): string {
+  if (val === null || val === undefined) return "";
+  // Strip ALL non-ASCII and ALL control characters (like newlines) to prevent PDF-lib crashes
+  return String(val)
+    .replace(/[^\x20-\x7E]/g, "") // Keep only printable ASCII (space to tilde)
+    .trim();
 }
 
 function drawLabelValue(page: PDFPage, label: string, value: string, x: number, y: number, regular: PDFFont, bold: PDFFont) {
+  const cleanedVal = cleanText(value) || "-";
   page.drawText(label, { x, y, size: 9, font: regular, color: TEXT_MUTED });
-  page.drawText(cleanText(value) || "-", { x: x + 110, y, size: 9.5, font: bold, color: TEXT_DARK });
+  page.drawText(cleanedVal, { x: x + 110, y, size: 9.5, font: bold, color: TEXT_DARK });
 }
 
 export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<Uint8Array> {
@@ -206,20 +209,29 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
   if (data.notes) {
     page1.drawText("NOTES", { x: margin, y, size: 9, font: bold, color: PRIMARY });
     y -= 16;
-    // Word-wrap notes to max 80 chars per line
-    const maxChars = 80;
-    const noteLines = [];
-    let remaining = cleanText(data.notes);
-    while (remaining.length > maxChars) {
-      let breakAt = remaining.lastIndexOf(" ", maxChars);
-      if (breakAt === -1) breakAt = maxChars;
-      noteLines.push(remaining.substring(0, breakAt));
-      remaining = remaining.substring(breakAt + 1);
-    }
-    noteLines.push(remaining);
-    for (const line of noteLines) {
-      page1.drawText(line, { x: margin, y, size: 9, font: regular, color: TEXT_DARK });
-      y -= 14;
+    
+    // Improved wrap: first split by actual newlines, then by length
+    const rawNotes = String(data.notes).split(/[\r\n]+/);
+    for (const rawLine of rawNotes) {
+      let remaining = cleanText(rawLine);
+      const maxChars = 80;
+      while (remaining.length > 0) {
+        let chunk = remaining.substring(0, maxChars);
+        if (remaining.length > maxChars) {
+          let breakAt = chunk.lastIndexOf(" ");
+          if (breakAt > 20) {
+            chunk = remaining.substring(0, breakAt);
+            remaining = remaining.substring(breakAt + 1);
+          } else {
+            remaining = remaining.substring(maxChars);
+          }
+        } else {
+          remaining = "";
+        }
+        page1.drawText(chunk, { x: margin, y, size: 9, font: regular, color: TEXT_DARK });
+        y -= 14;
+        if (y < 100) break; // Don't run off the page
+      }
     }
   }
 
@@ -227,7 +239,7 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
   const footerY = 85;
   drawLine(page1, margin, footerY + 20, rightEdge, footerY + 20, 0.5);
 
-  page1.drawText(cleanText(`Booked by: ${data.createdBy}  |  Created: ${new Date(data.createdAt).toLocaleString("en-IN")}`), {
+  page1.drawText(cleanText(`Booked by: ${data.createdBy}  |  Created: ${data.createdAt.split('T')[0]}`), {
     x: margin, y: footerY + 6, size: 7.5, font: regular, color: TEXT_MUTED,
   });
   page1.drawText(cleanText(biz.address), {
@@ -402,7 +414,7 @@ export async function generateProfessionalReportPdf(data: ReportPdfData): Promis
   // Footer
   const footerY = 50;
   drawLine(page, margin, footerY + 20, rightEdge, footerY + 20, 0.5);
-  page.drawText(`Bookal Financial Report  |  Generated: ${new Date().toLocaleString()}`, {
+  page.drawText(cleanText(`Bookal Financial Report  |  Generated: ${new Date().toISOString().split('T')[0]}`), {
     x: margin, y: footerY + 6, size: 7.5, font: regular, color: TEXT_MUTED,
   });
 
