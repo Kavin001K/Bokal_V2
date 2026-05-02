@@ -361,7 +361,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     gap: 6,
-    shadowRadius: 4,
     elevation: 2,
     boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
   },

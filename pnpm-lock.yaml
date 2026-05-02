@@ -231,10 +231,13 @@ importers:
   artifacts/mobile:
     dependencies:
       expo-document-picker:
-        specifier: ~14.0.8
+        specifier: '*'
         version: 14.0.8(expo@54.0.34)
+      expo-file-system:
+        specifier: '*'
+        version: 19.0.22(expo@54.0.34)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
       expo-sharing:
-        specifier: ~14.0.8
+        specifier: '*'
         version: 14.0.8(expo@54.0.34)
       expo-updates:
         specifier: ~29.0.17

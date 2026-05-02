@@ -18,8 +18,8 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, "127.0.0.1", () => {
-  logger.info({ port, host: "127.0.0.1" }, "Server listening");
+app.listen(port, "0.0.0.0", () => {
+  logger.info({ port, host: "0.0.0.0" }, "Server listening");
 });
 
 process.on("unhandledRejection", (reason, promise) => {

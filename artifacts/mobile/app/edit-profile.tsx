@@ -24,7 +24,7 @@ export default function EditProfileScreen() {
   
   const [form, setForm] = useState({
     fullName: user?.fullName || "",
-    phoneNumber: user?.phoneNumber || "",
+    phoneNumber: user?.phoneNumber?.replace("+91", "") || "",
     dateOfBirth: user?.dateOfBirth || "",
   });
 
@@ -61,7 +61,10 @@ export default function EditProfileScreen() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          phoneNumber: form.phoneNumber.startsWith("+91") ? form.phoneNumber : `+91${form.phoneNumber}`
+        }),
       });
 
       const responseText = await res.text();
@@ -133,13 +136,21 @@ export default function EditProfileScreen() {
 
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>Phone Number</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.textPrimary }]}
-            value={form.phoneNumber}
-            onChangeText={(t) => setForm({ ...form, phoneNumber: t })}
-            placeholder="+91 98765 43210"
-            keyboardType="phone-pad"
-          />
+          <View style={[styles.input, styles.phoneInputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.countryCode, { color: colors.textPrimary }]}>+91</Text>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <TextInput
+              style={[styles.phoneInput, { color: colors.textPrimary }]}
+              value={form.phoneNumber}
+              onChangeText={(t) => {
+                // Only allow numbers and max 10 digits
+                const cleaned = t.replace(/[^0-9]/g, '').slice(0, 10);
+                setForm({ ...form, phoneNumber: cleaned });
+              }}
+              placeholder="88257 02072"
+              keyboardType="phone-pad"
+            />
+          </View>
         </View>
 
         <View style={styles.inputGroup}>
@@ -171,7 +182,7 @@ export default function EditProfileScreen() {
         message={alert.message}
         onClose={() => {
           setAlert({ ...alert, visible: false });
-          if (alert.type === 'success') router.back();
+          if (alert.type === 'success') router.replace("/(tabs)");
         }}
       />
 
@@ -240,6 +251,10 @@ const styles = StyleSheet.create({
   dateInput: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   saveBtn: { height: 58, borderRadius: 16, alignItems: "center", justifyContent: "center", marginTop: 10 },
   saveBtnText: { color: "#fff", fontSize: 17, fontWeight: "700" },
+  phoneInputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0 },
+  countryCode: { fontSize: 16, fontWeight: '600', paddingLeft: 16, paddingRight: 10 },
+  divider: { width: 1, height: 24, marginRight: 10 },
+  phoneInput: { flex: 1, height: '100%', fontSize: 16, paddingRight: 16 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 20 },
   modalContent: { borderRadius: 24, padding: 24, alignItems: 'center' },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 20 },
