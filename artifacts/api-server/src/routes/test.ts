@@ -23,8 +23,8 @@ router.get("/pdf-test", async (_req, res) => {
       createdBy: "System Test",
       createdAt: new Date().toISOString(),
       business: {
-        name: "MAHALBOOK TEST",
-        tagline: "Ultra-Hardened PDF Engine",
+        name: "BOOKAL TEST",
+        tagline: "Professional Venue Management",
         address: "Test Server, Madurai",
         phone: "+91 00000 00000",
         email: "test@bookal.app",

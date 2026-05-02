@@ -19,7 +19,8 @@ function calcDuration(startTime: string, endTime: string): number {
 }
 
 // Format a YYYY-MM-DD string safely without UTC timezone shift
-function formatDateSafe(dateStr: string | null | undefined): string {
+function formatDateSafe(val: any): string {
+  const dateStr = String(val || "");
   if (!dateStr || !dateStr.includes("-")) return "N/A";
   const parts = dateStr.split("-");
   if (parts.length < 3) return dateStr;
@@ -30,7 +31,7 @@ function formatDateSafe(dateStr: string | null | undefined): string {
 
 async function generateBookingRef(): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = `MBK-${year}-`;
+  const prefix = `BKL-${year}-`;
   // Use SQL MAX to get highest ref atomically — avoids race condition duplicates
   const result = await db
     .select({
@@ -587,7 +588,8 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
       }
     });
 
-    const fileName = `Receipt_${b.bookingRef}_${b.customerName.replace(/[^a-zA-Z0-9 ._-]/g, '').replace(/\s+/g, '_')}.pdf`;
+    const safeName = (b.customerName || "Customer").replace(/[^a-zA-Z0-9 ._-]/g, '').replace(/\s+/g, '_');
+    const fileName = `Receipt_${b.bookingRef}_${safeName}.pdf`;
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);

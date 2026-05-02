@@ -55,7 +55,7 @@ export default function HomeScreen() {
   const tamilToday = gregorianToTamil(today);
 
   const { data: settings } = useGetSettings({ query: { queryKey: ["settings"] } });
-  const bizName = settings?.biz_name || "MahalBook";
+  const bizName = settings?.biz_name || "Bookal";
 
   const { data, refetch, isLoading } = useGetBookings(
     { limit: 50 },

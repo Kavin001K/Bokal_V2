@@ -228,7 +228,7 @@ export default function SettingsScreen() {
             style={[styles.bizInput, { color: colors.textPrimary, borderColor: colors.border }]}
             value={bizForm.biz_name}
             onChangeText={(t) => setBizForm({ ...bizForm, biz_name: t })}
-            placeholder="e.g. MahalBook Venues"
+            placeholder="e.g. Bookal Venues"
           />
 
           <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Tagline / Motto</Text>
