@@ -16,6 +16,11 @@
     "production": {
       "channel": "production",
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "bookal.onrender.com",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://dbwcgbnowoabwkztfmqi.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRid2NnYm5vd29hYndrenRmbXFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NTY5NzUsImV4cCI6MjA5MzIzMjk3NX0.UMz-GElsFWv2AfmVY18IIbl1V9Dp7j66PQT76baxvHc"
+      },
       "android": {
         "buildType": "apk"
       }
