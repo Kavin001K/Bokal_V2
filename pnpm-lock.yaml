@@ -230,6 +230,9 @@ importers:
 
   artifacts/mobile:
     dependencies:
+      '@expo-google-fonts/inter':
+        specifier: ^0.4.0
+        version: 0.4.2
       expo-document-picker:
         specifier: '*'
         version: 14.0.8(expo@54.0.34)
@@ -246,9 +249,6 @@ importers:
       '@babel/core':
         specifier: ^7.25.2
         version: 7.29.0
-      '@expo-google-fonts/inter':
-        specifier: ^0.4.0
-        version: 0.4.2
       '@expo/cli':
         specifier: 54.0.23
         version: 54.0.23(expo-router@6.0.23)(expo@54.0.34)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(typescript@5.9.3)

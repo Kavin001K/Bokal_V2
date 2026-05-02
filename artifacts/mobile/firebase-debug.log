@@ -1,0 +1,91 @@
+[debug] [2026-05-02T14:29:43.403Z] ----------------------------------------------------------------------
+[debug] [2026-05-02T14:29:43.404Z] Command:       /Users/kavin/.nvm/versions/node/v20.20.2/bin/node /Users/kavin/.npm/_npx/7750544ccf494d8b/node_modules/.bin/firebase deploy --only hosting
+[debug] [2026-05-02T14:29:43.404Z] CLI Version:   15.16.0
+[debug] [2026-05-02T14:29:43.404Z] Platform:      darwin
+[debug] [2026-05-02T14:29:43.404Z] Node Version:  v20.20.2
+[debug] [2026-05-02T14:29:43.404Z] Time:          Sat May 02 2026 19:59:43 GMT+0530 (India Standard Time)
+[debug] [2026-05-02T14:29:43.404Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-02T14:29:44.022Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-02T14:29:44.022Z] > authorizing via signed-in user (kavinbalaji365@gmail.com)
+[debug] [2026-05-02T14:29:44.022Z] [iam] checking project bookal-erp-v123 for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-05-02T14:29:44.023Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:44.023Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:44.023Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/bookal-erp-v123:testIamPermissions [none]
+[debug] [2026-05-02T14:29:44.023Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/bookal-erp-v123:testIamPermissions  x-goog-user-project=bookal-erp-v123
+[debug] [2026-05-02T14:29:44.023Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bookal-erp-v123:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-05-02T14:29:45.372Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/bookal-erp-v123:testIamPermissions 200
+[debug] [2026-05-02T14:29:45.372Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/bookal-erp-v123:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-05-02T14:29:45.372Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:45.372Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:45.373Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/bookal-erp-v123 [none]
+[debug] [2026-05-02T14:29:46.129Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/bookal-erp-v123 200
+[debug] [2026-05-02T14:29:46.129Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/bookal-erp-v123 {"projectId":"bookal-erp-v123","projectNumber":"748769586628","displayName":"Bookal","name":"projects/bookal-erp-v123","resources":{"hostingSite":"bookal-erp-v123"},"state":"ACTIVE","etag":"1_73ed0a28-6f93-4236-9f3f-05fbe2668c0a"}
+[info] 
+[info] === Deploying to 'bookal-erp-v123'...
+[info] 
+[info] i  deploying hosting 
+[debug] [2026-05-02T14:29:46.131Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:46.131Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:46.131Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/bookal-erp-v123/sites/bookal-erp-v123 [none]
+[debug] [2026-05-02T14:29:47.208Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/bookal-erp-v123/sites/bookal-erp-v123 200
+[debug] [2026-05-02T14:29:47.208Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/bookal-erp-v123/sites/bookal-erp-v123 {"name":"projects/bookal-erp-v123/sites/bookal-erp-v123","defaultUrl":"https://bookal-erp-v123.web.app","type":"DEFAULT_SITE"}
+[debug] [2026-05-02T14:29:47.209Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:47.209Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:47.210Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/bookal-erp-v123/versions [none]
+[debug] [2026-05-02T14:29:47.210Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/bookal-erp-v123/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2026-05-02T14:29:48.149Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/bookal-erp-v123/versions 200
+[debug] [2026-05-02T14:29:48.149Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/bookal-erp-v123/versions {"name":"projects/748769586628/sites/bookal-erp-v123/versions/ec8a3827f65ab905","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[info] i  hosting[bookal-erp-v123]: beginning deploy... 
+[info] i  hosting[bookal-erp-v123]: found 4 files in dist 
+[debug] [2026-05-02T14:29:48.166Z] [hosting] uploading with 200 concurrency
+[debug] [2026-05-02T14:29:48.234Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:48.234Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:48.234Z] [hosting] hash cache [ZGlzdA] stored for 4 files
+[debug] [2026-05-02T14:29:48.234Z] [hosting][hash queue][FINAL] {"max":63,"min":4,"avg":19,"active":0,"complete":4,"success":4,"errored":0,"retried":0,"total":4,"elapsed":65}
+[debug] [2026-05-02T14:29:48.234Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/748769586628/sites/bookal-erp-v123/versions/ec8a3827f65ab905:populateFiles [none]
+[debug] [2026-05-02T14:29:48.234Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/748769586628/sites/bookal-erp-v123/versions/ec8a3827f65ab905:populateFiles {"files":{"/index.html":"b6158943c8f8302737ee3bd833ed26c181f6c18ac89c1b3796a092f461863d0f","/metadata.json":"b5ef5f9672b8cfbac9303a0e2ff9d880a832b8c82e37d4d1c32f9a68efb29970","/favicon.ico":"40a34a77377ae35855ee72ed69ae513ca8de63dab89e0d00236c9c74c6e805ca","/_expo/static/js/web/entry-b5fa02d9d29802e2f6a290227a431875.js":"74ad8ef4f96c657908cf883ed393146e149a7fe6fd6e8718c2b0500155e3f73e"}}
+[debug] [2026-05-02T14:29:49.200Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/748769586628/sites/bookal-erp-v123/versions/ec8a3827f65ab905:populateFiles 200
+[debug] [2026-05-02T14:29:49.201Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/748769586628/sites/bookal-erp-v123/versions/ec8a3827f65ab905:populateFiles {"uploadRequiredHashes":["b6158943c8f8302737ee3bd833ed26c181f6c18ac89c1b3796a092f461863d0f","74ad8ef4f96c657908cf883ed393146e149a7fe6fd6e8718c2b0500155e3f73e"],"uploadUrl":"https://upload-firebasehosting.googleapis.com/upload/sites/bookal-erp-v123/versions/ec8a3827f65ab905/files"}
+[debug] [2026-05-02T14:29:49.202Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:49.202Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:49.203Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:49.203Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:49.203Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/bookal-erp-v123/versions/ec8a3827f65ab905/files/b6158943c8f8302737ee3bd833ed26c181f6c18ac89c1b3796a092f461863d0f [none]
+[debug] [2026-05-02T14:29:49.203Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/bookal-erp-v123/versions/ec8a3827f65ab905/files/b6158943c8f8302737ee3bd833ed26c181f6c18ac89c1b3796a092f461863d0f [stream]
+[debug] [2026-05-02T14:29:49.204Z] >>> [apiv2][query] POST https://upload-firebasehosting.googleapis.com/upload/sites/bookal-erp-v123/versions/ec8a3827f65ab905/files/74ad8ef4f96c657908cf883ed393146e149a7fe6fd6e8718c2b0500155e3f73e [none]
+[debug] [2026-05-02T14:29:49.204Z] >>> [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/bookal-erp-v123/versions/ec8a3827f65ab905/files/74ad8ef4f96c657908cf883ed393146e149a7fe6fd6e8718c2b0500155e3f73e [stream]
+[debug] [2026-05-02T14:29:49.206Z] [hosting][populate queue][FINAL] {"max":969,"min":969,"avg":969,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":972}
+[debug] [2026-05-02T14:29:49.206Z] [hosting] uploads queued: 2
+[debug] [2026-05-02T14:29:51.058Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/bookal-erp-v123/versions/ec8a3827f65ab905/files/74ad8ef4f96c657908cf883ed393146e149a7fe6fd6e8718c2b0500155e3f73e 200
+[debug] [2026-05-02T14:29:51.058Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/bookal-erp-v123/versions/ec8a3827f65ab905/files/74ad8ef4f96c657908cf883ed393146e149a7fe6fd6e8718c2b0500155e3f73e [stream]
+[debug] [2026-05-02T14:29:51.230Z] <<< [apiv2][status] POST https://upload-firebasehosting.googleapis.com/upload/sites/bookal-erp-v123/versions/ec8a3827f65ab905/files/b6158943c8f8302737ee3bd833ed26c181f6c18ac89c1b3796a092f461863d0f 200
+[debug] [2026-05-02T14:29:51.230Z] <<< [apiv2][body] POST https://upload-firebasehosting.googleapis.com/upload/sites/bookal-erp-v123/versions/ec8a3827f65ab905/files/b6158943c8f8302737ee3bd833ed26c181f6c18ac89c1b3796a092f461863d0f [stream]
+[debug] [2026-05-02T14:29:51.230Z] [hosting][upload queue][FINAL] {"max":2029,"min":1856,"avg":1942.5,"active":0,"complete":2,"success":2,"errored":0,"retried":0,"total":2,"elapsed":2029}
+[info] ✔  hosting[bookal-erp-v123]: file upload complete 
+[debug] [2026-05-02T14:29:51.230Z] [hosting] deploy completed after 3079ms
+[debug] [2026-05-02T14:29:51.230Z] [
+  {
+    "config": {
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "site": "bookal-erp-v123"
+    },
+    "version": "projects/748769586628/sites/bookal-erp-v123/versions/ec8a3827f65ab905"
+  }
+]
+[info] i  hosting[bookal-erp-v123]: finalizing version... 
+[debug] [2026-05-02T14:29:51.231Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:51.231Z] Checked if tokens are valid: true, expires at: 1777734070980
+[debug] [2026-05-02T14:29:51.231Z] >>> [apiv2][query] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/bookal-erp-v123/versions/ec8a3827f65ab905 updateMask=status%2Cconfig
+[debug] [2026-05-02T14:29:51.231Z] >>> [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/bookal-erp-v123/versions/ec8a3827f65ab905 {"status":"FINALIZED","config":{"rewrites":[{"glob":"**","path":"/index.html"}]}}
