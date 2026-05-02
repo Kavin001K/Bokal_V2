@@ -56,20 +56,26 @@ export interface BookingPdfData {
   business?: BusinessInfo;
 }
 
-const PRIMARY = rgb(0.78, 0.36, 0.16); // #C75B2A
+const PRIMARY = rgb(0.49, 0.21, 0.09); // #7C3518 (Header Brown)
+const ACCENT = rgb(0.78, 0.36, 0.16);  // #C75B2A (Branding Orange/Brown)
 const TEXT_DARK = rgb(0.10, 0.07, 0.04); // #1A1209
 const TEXT_MUTED = rgb(0.42, 0.34, 0.27); // #6B5744
 const BORDER = rgb(0.91, 0.87, 0.83); // #E8DDD4
 const WHITE = rgb(1, 1, 1);
 const BG_LIGHT = rgb(0.99, 0.97, 0.95); // #FDF8F3
 
-function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number, thickness = 0.5) {
+function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number, thickness = 0.5, color = BORDER) {
   page.drawLine({
     start: { x: x1, y: y1 },
     end: { x: x2, y: y2 },
     thickness,
-    color: BORDER,
+    color,
   });
+}
+
+function drawSectionIcon(page: PDFPage, x: number, y: number, color = ACCENT) {
+  // Simple circle icon background
+  page.drawCircle({ x, y, size: 12, color, opacity: 1 });
 }
 
 function wrapText(text: string, maxWidth: number, font: PDFFont, fontSize: number): string[] {
@@ -101,184 +107,233 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
 
     const biz = data.business || {
       name: "BOOKAL",
-      tagline: "Professional Venue Management",
+      tagline: "Excellence in Event",
       address: "1/85 Zamin Kottampatti, Pollachi, TN 642123",
       phone: "+91 88257 02072",
       email: "bookings@bookal.app",
-      gst: ""
+      gst: "33AAAAA0000A1Z5"
     };
 
     const margin = 45;
     const rightEdge = width - margin;
 
-    // --- HEADER: PREMIUM BRANDING ---
-    page1.drawRectangle({ x: 0, y: height - 120, width, height: 120, color: PRIMARY });
-
-    // Left side: Logo/Name
-    page1.drawText(cleanText(biz.name), {
-      x: margin, y: height - 50, size: 26, font: bold, color: WHITE,
-    });
-    page1.drawText(cleanText(biz.tagline), {
-      x: margin, y: height - 68, size: 11, font: regular, color: WHITE,
-    });
+    // --- 1. HEADER: PREMIUM CURVED SHAPE ---
+    const headerHeight = 160;
+    // Main rectangle
+    page1.drawRectangle({ x: 0, y: height - headerHeight, width, height: headerHeight, color: PRIMARY });
     
-    // Right side: Business Contact Info
-    let bizY = height - 40;
-    const bizFontSize = 8.5;
-    const bizTextX = width / 2 + 30;
+    // Draw the curve (overlaying with a lighter brown or path)
+    page1.drawEllipse({
+      x: width + 20,
+      y: height - 60,
+      xScale: 250,
+      yScale: 200,
+      color: ACCENT,
+      opacity: 0.3
+    });
 
-    const drawBizInfo = (text: string, icon: string = "") => {
+    // Logo & Name (Left)
+    // Draw Hexagon for Logo "B"
+    const hexX = margin + 20;
+    const hexY = height - 80;
+    const s = 18; // size
+    page1.drawRectangle({
+      x: hexX - s/2,
+      y: hexY - s/2,
+      width: s,
+      height: s,
+      borderColor: WHITE,
+      borderWidth: 2,
+      rotate: { type: 'degrees', angle: 45 }
+    });
+    page1.drawText("B", { x: hexX - 7, y: hexY - 8, size: 20, font: bold, color: WHITE });
+    
+    page1.drawText(cleanText(biz.name), { x: margin + 55, y: height - 88, size: 38, font: bold, color: WHITE });
+    page1.drawText(cleanText(biz.tagline), { x: margin + 57, y: height - 105, size: 12, font: regular, color: WHITE });
+
+    // Business Info (Right)
+    let bizY = height - 50;
+    const bizFontSize = 9;
+    const bizTextX = width - 200;
+
+    const drawHeaderContact = (text: string, icon: string) => {
       if (!text) return;
-      page1.drawText(cleanText(text), {
-        x: bizTextX, y: bizY, size: bizFontSize, font: regular, color: WHITE,
-      });
-      bizY -= 14;
+      // Icon dot
+      page1.drawCircle({ x: bizTextX - 10, y: bizY + 3, size: 2.5, color: ACCENT });
+      page1.drawText(cleanText(text), { x: bizTextX, y: bizY, size: bizFontSize, font: regular, color: WHITE });
+      bizY -= 15;
     };
 
-    drawBizInfo(biz.address);
-    drawBizInfo(`P: ${biz.phone} | E: ${biz.email}`);
-    if (biz.gst) drawBizInfo(`GST: ${biz.gst}`);
-    
+    drawHeaderContact(biz.address, "pin");
+    drawHeaderContact(biz.phone, "phone");
+    drawHeaderContact(biz.email, "mail");
+    if (biz.gst) drawHeaderContact(`GST: ${biz.gst}`, "file");
+
     // Reference Badge
-    page1.drawRectangle({ x: rightEdge - 140, y: height - 105, width: 140, height: 24, color: WHITE, opacity: 0.15 });
-    page1.drawText(`REF: ${data.bookingRef}`, {
-      x: rightEdge - 130, y: height - 98, size: 11, font: bold, color: WHITE,
-    });
+    const refLabel = `REF: ${data.bookingRef}`;
+    const refW = bold.widthOfTextAtSize(refLabel, 10);
+    page1.drawRectangle({ x: rightEdge - refW - 20, y: height - 145, width: refW + 20, height: 22, color: ACCENT, borderRadius: 4 });
+    page1.drawText(refLabel, { x: rightEdge - refW - 10, y: height - 138, size: 10, font: bold, color: WHITE });
 
-    // --- SECTION: BOOKING RECEIPT TITLE ---
-    let y = height - 150;
-    page1.drawText("BOOKING RECEIPT", { x: margin, y, size: 18, font: bold, color: PRIMARY });
-    y -= 12;
-    drawLine(page1, margin, y, rightEdge, y, 1);
+    // --- 2. TITLE & SEPARATOR ---
+    let y = height - 200;
+    const title = "BOOKING RECEIPT";
+    const titleW = bold.widthOfTextAtSize(title, 24);
+    page1.drawText(title, { x: (width - titleW) / 2, y, size: 24, font: bold, color: TEXT_DARK });
     
-    // --- GRID: CLIENT & EVENT INFO ---
-    y -= 35;
-    const col2X = width / 2 + 10;
-    const sectionTitleSize = 9;
-    const infoLabelSize = 9;
-    const infoValueSize = 10;
-    
-    page1.drawText("CLIENT INFORMATION", { x: margin, y, size: sectionTitleSize, font: bold, color: PRIMARY });
-    page1.drawText("EVENT SCHEDULE", { x: col2X, y, size: sectionTitleSize, font: bold, color: PRIMARY });
-    y -= 25;
-    
-    // Customer Name
-    page1.drawText("Customer Name", { x: margin, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
-    page1.drawText(cleanText(data.customerName), { x: margin + 90, y, size: infoValueSize, font: bold, color: TEXT_DARK });
-    
-    // Date
-    page1.drawText("Date", { x: col2X, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
-    page1.drawText(cleanText(data.bookingDate), { x: col2X + 80, y, size: infoValueSize, font: bold, color: TEXT_DARK });
-    y -= 20;
-
-    // Phone
-    page1.drawText("Phone", { x: margin, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
-    page1.drawText(cleanText(data.phones), { x: margin + 90, y, size: infoValueSize, font: bold, color: TEXT_DARK });
-    
-    // Tamil Date
-    page1.drawText("Tamil Date", { x: col2X, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
-    page1.drawText(cleanText(data.tamilDate), { x: col2X + 80, y, size: infoValueSize, font: bold, color: TEXT_DARK });
-    y -= 20;
-
-    // Address (with Wrapping)
-    page1.drawText("Address", { x: margin, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
-    const addrLines = wrapText(data.address, 180, regular, infoValueSize);
-    let addrY = y;
-    addrLines.forEach(line => {
-      page1.drawText(cleanText(line), { x: margin + 90, y: addrY, size: infoValueSize, font: bold, color: TEXT_DARK });
-      addrY -= 14;
-    });
-
-    // Time & Duration
-    page1.drawText("Time", { x: col2X, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
-    page1.drawText(`${data.startTime} - ${data.endTime}`, { x: col2X + 80, y, size: infoValueSize, font: bold, color: TEXT_DARK });
-    y -= 20;
-    page1.drawText("Duration", { x: col2X, y, size: infoLabelSize, font: regular, color: TEXT_MUTED });
-    page1.drawText(`${data.duration} hours`, { x: col2X + 80, y, size: infoValueSize, font: bold, color: TEXT_DARK });
-    
-    // Adjust y based on address lines
-    y = Math.min(y - 20, addrY - 15);
-    
-    // --- VENUES & PRICING ---
-    page1.drawText("VENUE & PRICING", { x: margin, y, size: sectionTitleSize, font: bold, color: PRIMARY });
-    y -= 10;
-    drawLine(page1, margin, y, rightEdge, y, 0.5);
-    y -= 18;
-    
-    page1.drawText("Description", { x: margin, y, size: 8, font: bold, color: TEXT_MUTED });
-    const subW = regular.widthOfTextAtSize("Subtotal (Rs.)", 8);
-    page1.drawText("Subtotal (Rs.)", { x: rightEdge - subW, y, size: 8, font: bold, color: TEXT_MUTED });
     y -= 15;
-    drawLine(page1, margin, y, rightEdge, y, 0.2);
-    y -= 20;
-
-    for (const venue of data.venues) {
-      page1.drawText(cleanText(venue.name), { x: margin, y, size: 10, font: regular, color: TEXT_DARK });
-      const subtotal = `Rs. ${venue.price}`;
-      const priceW = bold.widthOfTextAtSize(subtotal, 10);
-      page1.drawText(subtotal, { x: rightEdge - priceW, y, size: 10, font: bold, color: TEXT_DARK });
-      y -= 18;
-    }
-
-    y -= 10;
-    drawLine(page1, margin, y, rightEdge, y, 0.5);
-    y -= 25;
-
-    // Totals Section
-    const totalLabel = "GRAND TOTAL";
-    page1.drawText(totalLabel, { x: margin, y, size: 15, font: bold, color: TEXT_DARK });
-    const totalVal = `Rs. ${data.totalAmount}`;
-    const totalValW = bold.widthOfTextAtSize(totalVal, 16);
-    page1.drawText(totalVal, { x: rightEdge - totalValW, y, size: 16, font: bold, color: PRIMARY });
-    
-    y -= 22;
-    page1.drawText("Advance Paid:", { x: margin, y, size: 10, font: regular, color: TEXT_MUTED });
-    const advVal = `Rs. ${data.advanceAmount}`;
-    const advValW = bold.widthOfTextAtSize(advVal, 10);
-    page1.drawText(advVal, { x: rightEdge - advValW, y, size: 10, font: bold, color: TEXT_DARK });
-    
-    y -= 20;
-    const totalNum = parseFloat(String(data.totalAmount).replace(/,/g, '')) || 0;
-    const advNum = parseFloat(String(data.advanceAmount).replace(/,/g, '')) || 0;
-    const balDue = `Rs. ${(totalNum - advNum).toLocaleString('en-IN')}`;
-    const balDueW = bold.widthOfTextAtSize(balDue, 16);
-    
-    page1.drawText(data.isPaid ? "PAYMENT STATUS:" : "BALANCE DUE:", { x: margin, y, size: 11, font: bold, color: TEXT_DARK });
-    page1.drawText(data.isPaid ? "FULLY PAID" : balDue, { x: rightEdge - balDueW, y, size: 16, font: bold, color: data.isPaid ? rgb(0.1, 0.6, 0.1) : PRIMARY });
-
-    // --- NOTES ---
-    if (data.notes) {
-      y -= 35;
-      page1.drawText("NOTES", { x: margin, y, size: 9, font: bold, color: PRIMARY });
-      y -= 16;
-      const notesLines = wrapText(data.notes, 480, regular, 9);
-      notesLines.forEach(line => {
-        page1.drawText(cleanText(line), { x: margin, y, size: 9, font: regular, color: TEXT_DARK });
-        y -= 13;
-      });
-    }
-
-    // --- SIGNATURE SECTION (BOTTOM) ---
-    const sigY = 120;
-    drawLine(page1, margin, sigY, rightEdge, sigY, 0.5);
-    
-    // Customer Sig
-    const sigLineY = sigY - 60;
-    drawLine(page1, margin, sigLineY, margin + 180, sigLineY, 0.5);
-    page1.drawText("Customer Signature", { x: margin + 35, y: sigLineY - 14, size: 8, font: regular, color: TEXT_MUTED });
-    
-    // Authorized Sig
-    drawLine(page1, rightEdge - 180, sigLineY, rightEdge, sigLineY, 0.5);
-    page1.drawText("Authorized Signature & Stamp", { x: rightEdge - 165, y: sigLineY - 14, size: 8, font: regular, color: TEXT_MUTED });
-
-    // --- FOOTER ---
-    const footerY = 25;
-    page1.drawText(cleanText(`Booked by: ${data.createdBy}  |  Created: ${data.createdAt.split('T')[0]}`), {
-      x: margin, y: footerY, size: 7.5, font: regular, color: TEXT_MUTED,
+    // Diamond Separator
+    const sepX = width / 2;
+    drawLine(page1, margin + 40, y, sepX - 20, y, 0.5, BORDER);
+    drawLine(page1, sepX + 20, y, rightEdge - 40, y, 0.5, BORDER);
+    page1.drawRectangle({
+      x: sepX - 3,
+      y: y - 3,
+      width: 6,
+      height: 6,
+      color: ACCENT,
+      rotate: { type: 'degrees', angle: 45 }
     });
-    const siteLabel = "Generated by Bookal Management System";
-    const siteW = regular.widthOfTextAtSize(siteLabel, 7.5);
-    page1.drawText(siteLabel, { x: rightEdge - siteW, y: footerY, size: 7.5, font: regular, color: TEXT_MUTED });
+
+    // --- 3. INFORMATION CARDS ---
+    y -= 60;
+    const cardW = (width - margin * 2 - 20) / 2;
+    const cardH = 150;
+    
+    // Client Info Card
+    page1.drawRectangle({ x: margin, y: y - cardH, width: cardW, height: cardH, borderColor: BORDER, borderWidth: 1, borderRadius: 8 });
+    drawSectionIcon(page1, margin + 20, y);
+    page1.drawText("CLIENT INFORMATION", { x: margin + 40, y: y - 4, size: 10, font: bold, color: ACCENT });
+    
+    // Event Schedule Card
+    const col2X = margin + cardW + 20;
+    page1.drawRectangle({ x: col2X, y: y - cardH, width: cardW, height: cardH, borderColor: BORDER, borderWidth: 1, borderRadius: 8 });
+    drawSectionIcon(page1, col2X + 20, y);
+    page1.drawText("EVENT SCHEDULE", { x: col2X + 40, y: y - 4, size: 10, font: bold, color: ACCENT });
+
+    // Populate Cards
+    let cardY = y - 35;
+    const labelSize = 9;
+    const valueSize = 10;
+
+    // Card 1 Details
+    const drawCard1Row = (label: string, value: string) => {
+      page1.drawText(label, { x: margin + 15, y: cardY, size: labelSize, font: regular, color: TEXT_MUTED });
+      page1.drawText(cleanText(value), { x: margin + 95, y: cardY, size: valueSize, font: bold, color: TEXT_DARK });
+      cardY -= 25;
+    };
+    drawCard1Row("Customer Name", data.customerName);
+    drawCard1Row("Phone", data.phones);
+    // Address with wrap in card
+    page1.drawText("Address", { x: margin + 15, y: cardY, size: labelSize, font: regular, color: TEXT_MUTED });
+    const addrLines = wrapText(data.address, cardW - 110, regular, valueSize);
+    addrLines.slice(0, 3).forEach((line, i) => {
+      page1.drawText(cleanText(line), { x: margin + 95, y: cardY - (i * 12), size: valueSize, font: bold, color: TEXT_DARK });
+    });
+
+    // Card 2 Details
+    cardY = y - 35;
+    const drawCard2Row = (label: string, value: string) => {
+      page1.drawText(label, { x: col2X + 15, y: cardY, size: labelSize, font: regular, color: TEXT_MUTED });
+      page1.drawText(cleanText(value), { x: col2X + 90, y: cardY, size: valueSize, font: bold, color: TEXT_DARK });
+      cardY -= 25;
+    };
+    drawCard2Row("Date", data.bookingDate);
+    drawCard2Row("Tamil Date", data.tamilDate);
+    drawCard2Row("Time", `${data.startTime} - ${data.endTime}`);
+    drawCard2Row("Duration", `${data.duration} hours`);
+
+    // --- 4. VENUE & PRICING TABLE ---
+    y -= (cardH + 40);
+    drawSectionIcon(page1, margin + 15, y);
+    page1.drawText("VENUE & PRICING", { x: margin + 35, y: y - 4, size: 10, font: bold, color: ACCENT });
+    
+    y -= 25;
+    page1.drawRectangle({ x: margin, y: y - 20, width: width - margin * 2, height: 20, color: BG_LIGHT });
+    page1.drawText("Description", { x: margin + 10, y: y - 13, size: 9, font: bold, color: ACCENT });
+    page1.drawText("Subtotal (Rs.)", { x: rightEdge - 80, y: y - 13, size: 9, font: bold, color: ACCENT });
+    
+    y -= 40;
+    for (const venue of data.venues) {
+      page1.drawText(cleanText(venue.name), { x: margin + 10, y, size: 11, font: regular, color: TEXT_DARK });
+      const price = `Rs. ${venue.price}`;
+      const priceW = bold.widthOfTextAtSize(price, 11);
+      page1.drawText(price, { x: rightEdge - priceW - 10, y, size: 11, font: bold, color: TEXT_DARK });
+      y -= 20;
+    }
+    drawLine(page1, margin, y + 10, rightEdge, y + 10, 0.5, BORDER);
+
+    // --- 5. TOTALS BLOCK (GLASSMORPHISM STYLE) ---
+    y -= 80;
+    page1.drawRectangle({ 
+      x: margin, y, width: width - margin * 2, height: 90, 
+      color: BG_LIGHT, borderColor: BORDER, borderWidth: 1, borderRadius: 10 
+    });
+    // Add a soft circular pattern for texture (matching image)
+    page1.drawCircle({ x: rightEdge - 20, y: y + 20, size: 40, borderColor: ACCENT, borderWidth: 0.2, opacity: 0.1 });
+
+    page1.drawText("GRAND TOTAL", { x: margin + 20, y: y + 60, size: 16, font: bold, color: TEXT_DARK });
+    
+    // Advance Section
+    drawSectionIcon(page1, margin + 35, y + 30, BORDER);
+    page1.drawText("Advance Paid:", { x: margin + 60, y: y + 35, size: 10, font: regular, color: TEXT_MUTED });
+    page1.drawText(`Rs. ${data.advanceAmount}`, { x: margin + 60, y: y + 18, size: 13, font: bold, color: TEXT_DARK });
+
+    // Vertical Divider
+    drawLine(page1, margin + 230, y + 15, margin + 230, y + 75, 1, BORDER);
+
+    // Final Amount (Huge)
+    const grandTotal = `Rs. ${data.totalAmount}`;
+    const gtW = bold.widthOfTextAtSize(grandTotal, 36);
+    page1.drawText(grandTotal, { x: rightEdge - gtW - 20, y: y + 45, size: 36, font: bold, color: PRIMARY });
+
+    // Payment Status Pill
+    if (data.isPaid) {
+      const statusText = "FULLY PAID";
+      const stW = bold.widthOfTextAtSize(statusText, 10);
+      const pillW = stW + 30;
+      const pillX = rightEdge - pillW - 20;
+      page1.drawRectangle({ x: pillX, y: y + 15, width: pillW, height: 20, color: rgb(0.2, 0.7, 0.2), borderRadius: 10 });
+      
+      // Draw manual checkmark
+      const checkX = pillX + 12;
+      const checkY = y + 25;
+      page1.drawLine({ start: { x: checkX - 4, y: checkY }, end: { x: checkX - 1, y: checkY - 3 }, thickness: 1.5, color: WHITE });
+      page1.drawLine({ start: { x: checkX - 1, y: checkY - 3 }, end: { x: checkX + 4, y: checkY + 4 }, thickness: 1.5, color: WHITE });
+      
+      page1.drawText(statusText, { x: pillX + 22, y: y + 21, size: 10, font: bold, color: WHITE });
+      page1.drawText("PAYMENT STATUS", { x: pillX + 2, y: y + 38, size: 9, font: regular, color: TEXT_MUTED });
+    }
+
+    // --- 6. SIGNATURES ---
+    y -= 80;
+    const sigLineW = 160;
+    // Customer Sig
+    page1.drawText(cleanText(data.customerName), { x: margin + 40, y: y + 25, size: 18, font: regular, color: TEXT_DARK }); // Placeholder for script font
+    drawLine(page1, margin, y + 15, margin + sigLineW, y + 15, 0.8, TEXT_DARK);
+    page1.drawText("Customer Signature", { x: margin + 35, y: y, size: 9, font: regular, color: TEXT_MUTED });
+
+    // Authorized Sig
+    const authX = rightEdge - sigLineW;
+    page1.drawText("Bookal", { x: authX + 50, y: y + 25, size: 18, font: regular, color: TEXT_DARK });
+    drawLine(page1, authX, y + 15, rightEdge, y + 15, 0.8, TEXT_DARK);
+    page1.drawText("Authorized Signature & Stamp", { x: authX + 15, y: y, size: 9, font: regular, color: TEXT_MUTED });
+
+    // Stamp Circle
+    page1.drawCircle({ x: width / 2, y: y + 20, size: 15, borderColor: ACCENT, borderWidth: 1 });
+    page1.drawCircle({ x: width / 2, y: y + 20, size: 12, borderColor: ACCENT, borderWidth: 0.5 });
+
+    // --- 7. FOOTER ---
+    const footerY = 25;
+    page1.drawRectangle({ x: margin, y: footerY - 5, width: width - margin * 2, height: 25, color: BG_LIGHT, borderRadius: 4 });
+    
+    page1.drawText(`Booked by: ${data.createdBy}`, { x: margin + 10, y: footerY + 6, size: 8, font: regular, color: TEXT_MUTED });
+    drawLine(page1, margin + 130, footerY + 5, margin + 130, footerY + 15, 0.5, BORDER);
+    page1.drawText(`Created: ${data.createdAt.split('T')[0]}`, { x: margin + 145, y: footerY + 6, size: 8, font: regular, color: TEXT_MUTED });
+    
+    const genLabel = "Generated by Bookal Management System";
+    const glW = regular.widthOfTextAtSize(genLabel, 8);
+    page1.drawText(genLabel, { x: rightEdge - glW - 10, y: footerY + 6, size: 8, font: regular, color: TEXT_MUTED });
 
     return pdfDoc.save();
   } catch (err) {
