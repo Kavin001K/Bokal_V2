@@ -1,7 +1,8 @@
 /**
- * Professional Hand-Rolled 2-Page PDF Generator for Bookal.
+ * Professional PDF Generator for Bookal using pdf-lib.
  * Generates a branded, high-fidelity receipt (Page 1) and rules/conditions (Page 2).
  */
+import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont } from "pdf-lib";
 
 export interface BusinessInfo {
   name: string;
@@ -30,128 +31,255 @@ export interface BookingPdfData {
   business?: BusinessInfo;
 }
 
-export function generatePremiumBookingPdf(data: BookingPdfData): Uint8Array {
-  const esc = (str: string) => (str || "").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-  
+const PRIMARY = rgb(0.78, 0.36, 0.16); // #C75B2A
+const TEXT_DARK = rgb(0.10, 0.07, 0.04); // #1A1209
+const TEXT_MUTED = rgb(0.42, 0.34, 0.27); // #6B5744
+const BORDER = rgb(0.91, 0.87, 0.83); // #E8DDD4
+const WHITE = rgb(1, 1, 1);
+const BG_LIGHT = rgb(0.99, 0.97, 0.95); // #FDF8F3
+
+function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number, thickness = 0.5) {
+  page.drawLine({
+    start: { x: x1, y: y1 },
+    end: { x: x2, y: y2 },
+    thickness,
+    color: BORDER,
+  });
+}
+
+function drawLabelValue(page: PDFPage, label: string, value: string, x: number, y: number, regular: PDFFont, bold: PDFFont) {
+  page.drawText(label, { x, y, size: 9, font: regular, color: TEXT_MUTED });
+  page.drawText(value || "-", { x: x + 110, y, size: 9.5, font: bold, color: TEXT_DARK });
+}
+
+export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<Uint8Array> {
   const biz = data.business || {
-    name: "MAHALBOOK VENUES",
-    tagline: "Excellence in Event Hosting",
-    address: "123 Main Street, Tamil Nadu",
+    name: "BOOKAL VENUES",
+    tagline: "Venue Booking Made Simple",
+    address: "Tamil Nadu, India",
     phone: "+91 98765 43210",
-    email: "contact@mahalbook.app",
-    gst: "33AAAAA0000A1Z5"
+    email: "contact@bookal.app",
+    gst: "",
   };
 
-  // --- PAGE 1 CONTENT (Premium Receipt) ---
-  const p1Lines = [
-    // Header Section
-    `BT /F2 26 Tf 50 750 Td (${esc(biz.name.toUpperCase())}) Tj ET`,
-    `BT /F1 10 Tf 50 735 Td (${esc(biz.tagline)}) Tj ET`,
-    `BT /F1 9 Tf 50 722 Td (GST: ${esc(biz.gst)}) Tj ET`,
-    
-    // Horizontal Line (Vector-style)
-    `0.5 w 50 710 m 560 710 l S`,
+  const pdfDoc = await PDFDocument.create();
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    // Ref Number & Title
-    `BT /F2 18 Tf 50 680 Td (BOOKING RECEIPT) Tj ET`,
-    `BT /F2 14 Tf 400 680 Td (Ref: ${esc(data.bookingRef)}) Tj ET`,
+  // ===== PAGE 1: RECEIPT =====
+  const page1 = pdfDoc.addPage([595, 842]); // A4
+  const { width, height } = page1.getSize();
+  const margin = 45;
+  const rightEdge = width - margin;
 
-    // Customer Block
-    `BT /F2 11 Tf 50 640 Td (CLIENT INFORMATION) Tj ET`,
-    `BT /F1 11 Tf 50 625 Td (Name: ${esc(data.customerName)}) Tj ET`,
-    `BT /F1 11 Tf 50 610 Td (Phone: ${esc(data.phones)}) Tj ET`,
-    `BT /F1 11 Tf 50 595 Td (Address: ${esc(data.address)}) Tj ET`,
+  // --- HEADER BLOCK ---
+  page1.drawRectangle({ x: 0, y: height - 90, width, height: 90, color: PRIMARY });
 
-    // Schedule Block
-    `BT /F2 11 Tf 350 640 Td (EVENT SCHEDULE) Tj ET`,
-    `BT /F1 11 Tf 350 625 Td (Date: ${esc(data.bookingDate)}) Tj ET`,
-    `BT /F1 10 Tf 350 610 Td (${esc(data.tamilDate)}) Tj ET`,
-    `BT /F1 11 Tf 350 595 Td (Time: ${esc(data.startTime)} - ${esc(data.endTime)}) Tj ET`,
+  page1.drawText(biz.name.toUpperCase(), {
+    x: margin, y: height - 38, size: 22, font: bold, color: WHITE,
+  });
+  page1.drawText(biz.tagline, {
+    x: margin, y: height - 55, size: 10, font: regular, color: rgb(1, 0.92, 0.87),
+  });
+  if (biz.gst) {
+    page1.drawText(`GST: ${biz.gst}`, {
+      x: margin, y: height - 72, size: 8, font: regular, color: rgb(1, 0.85, 0.78),
+    });
+  }
 
-    // Line separator
-    `0.2 w 50 575 m 560 575 l S`,
-
-    // Venue & Pricing Header
-    `BT /F2 11 Tf 50 555 Td (DESCRIPTION) Tj 450 555 Td (SUBTOTAL) Tj ET`,
-  ];
-
-  // Venues Table Rows
-  data.venues.forEach((v, i) => {
-    const y = 535 - i * 20;
-    p1Lines.push(`BT /F1 11 Tf 50 ${y} Td (${esc(v.name)}) Tj 450 ${y} Td (Rs. ${esc(v.price)}) Tj ET`);
+  // Ref on the right side of the header
+  const refWidth = bold.widthOfTextAtSize(`Ref: ${data.bookingRef}`, 12);
+  page1.drawText(`Ref: ${data.bookingRef}`, {
+    x: rightEdge - refWidth, y: height - 40, size: 12, font: bold, color: WHITE,
   });
 
-  const footerTop = 400;
-  p1Lines.push(
-    `0.5 w 50 ${footerTop + 20} m 560 ${footerTop + 20} l S`,
-    `BT /F2 16 Tf 50 ${footerTop} Td (GRAND TOTAL) Tj 430 ${footerTop} Td (Rs. ${esc(data.totalAmount)}) Tj ET`,
-    
-    // Notes
-    `BT /F1 10 Tf 50 ${footerTop - 40} Td (Notes: ${esc(data.notes || "No special requirements recorded.")}) Tj ET`,
+  // --- RECEIPT TITLE ---
+  let y = height - 120;
+  page1.drawText("BOOKING RECEIPT", { x: margin, y, size: 16, font: bold, color: PRIMARY });
+  y -= 8;
+  drawLine(page1, margin, y, rightEdge, y, 1);
 
-    // Business Footer
-    `0.2 w 50 80 m 560 80 l S`,
-    `BT /F1 8 Tf 50 65 Td (${esc(biz.address)}) Tj ET`,
-    `BT /F1 8 Tf 50 55 Td (P: ${esc(biz.phone)} | E: ${esc(biz.email)}) Tj 400 55 Td (Software by MahalBook v1.0) Tj ET`,
-  );
+  // --- CLIENT INFO ---
+  y -= 22;
+  page1.drawText("CLIENT INFORMATION", { x: margin, y, size: 9, font: bold, color: PRIMARY });
+  y -= 20;
+  drawLabelValue(page1, "Customer Name", data.customerName, margin, y, regular, bold);
+  y -= 18;
+  drawLabelValue(page1, "Phone", data.phones, margin, y, regular, bold);
+  y -= 18;
+  drawLabelValue(page1, "Address", data.address, margin, y, regular, bold);
 
-  const p1Text = p1Lines.join("\n");
+  // --- EVENT SCHEDULE (right column) ---
+  const col2X = 330;
+  let y2 = height - 142;
+  page1.drawText("EVENT SCHEDULE", { x: col2X, y: y2, size: 9, font: bold, color: PRIMARY });
+  y2 -= 20;
+  drawLabelValue(page1, "Date", data.bookingDate, col2X, y2, regular, bold);
+  y2 -= 18;
+  if (data.tamilDate) {
+    drawLabelValue(page1, "Tamil Date", data.tamilDate, col2X, y2, regular, bold);
+    y2 -= 18;
+  }
+  drawLabelValue(page1, "Time", `${data.startTime} - ${data.endTime}`, col2X, y2, regular, bold);
+  y2 -= 18;
+  drawLabelValue(page1, "Duration", `${data.duration} hours`, col2X, y2, regular, bold);
 
-  // --- PAGE 2 CONTENT (Standard Mahal Rules) ---
-  const p2Lines = [
-    `BT /F2 18 Tf 50 750 Td (TERMS & CONDITIONS) Tj ET`,
-    `0.5 w 50 740 m 560 740 l S`,
-    `BT /F1 11 Tf 50 710 Td (1. BOOKING ADVANCE: 50% of the total amount must be paid to confirm the slot.) Tj ET`,
-    `BT /F1 11 Tf 50 690 Td (2. FINAL PAYMENT: Remaining balance due exactly 7 days prior to the event date.) Tj ET`,
-    `BT /F1 11 Tf 50 670 Td (3. CANCELLATION: No refund if cancelled within 15 days of event. 50% if 30 days.) Tj ET`,
-    `BT /F1 11 Tf 50 650 Td (4. ELECTRICITY: AC usage charges are calculated as per actual meter readings separately.) Tj ET`,
-    `BT /F1 11 Tf 50 630 Td (5. CLEANING: A mandatory cleaning fee of Rs. 1,000 is included in every booking.) Tj ET`,
-    `BT /F1 11 Tf 50 610 Td (6. DECORATIONS: Strictly no nails, tape, or permanent markings on walls or ceilings.) Tj ET`,
-    `BT /F1 11 Tf 50 590 Td (7. MUSIC/SOUND: Volume must adhere to legal limits; no loud music after 10:00 PM.) Tj ET`,
-    `BT /F1 11 Tf 50 570 Td (8. DAMAGES: Any property damage will be billed directly to the primary customer.) Tj ET`,
-    `BT /F1 11 Tf 50 550 Td (9. VALUABLES: Management is not responsible for loss of personal cash or jewelry.) Tj ET`,
-    `BT /F1 11 Tf 50 530 Td (10. LIQUOR: Consumption of alcohol is strictly prohibited within the Mahal premises.) Tj ET`,
-    
-    `BT /F2 11 Tf 50 480 Td (ACKNOWLEDGEMENT) Tj ET`,
-    `BT /F1 10 Tf 50 460 Td (I have read and agree to follow all the rules and conditions mentioned above.) Tj ET`,
-    `BT /F1 11 Tf 50 400 Td (Customer Signature: ________________________) Tj 350 400 Td (Date: ____________) Tj ET`,
+  // --- SEPARATOR ---
+  y = Math.min(y, y2) - 20;
+  drawLine(page1, margin, y, rightEdge, y, 0.8);
 
-    // Page 2 Footer
-    `0.2 w 50 80 m 560 80 l S`,
-    `BT /F1 8 Tf 50 65 Td (${esc(biz.name)}) Tj 500 65 Td (Page 2/2) Tj ET`,
-  ];
-  const p2Text = p2Lines.join("\n");
+  // --- VENUE & PRICING TABLE ---
+  y -= 22;
+  page1.drawText("VENUE & PRICING", { x: margin, y, size: 9, font: bold, color: PRIMARY });
+  y -= 5;
+  drawLine(page1, margin, y, rightEdge, y, 0.5);
 
-  // PDF Streams
-  const p1Stream = `stream\n${p1Text}\nendstream`;
-  const p2Stream = `stream\n${p2Text}\nendstream`;
+  // Table header
+  y -= 18;
+  page1.drawText("Description", { x: margin, y, size: 8.5, font: bold, color: TEXT_MUTED });
+  const amtHeaderW = bold.widthOfTextAtSize("Subtotal (Rs.)", 8.5);
+  page1.drawText("Subtotal (Rs.)", { x: rightEdge - amtHeaderW, y, size: 8.5, font: bold, color: TEXT_MUTED });
+  y -= 4;
+  drawLine(page1, margin, y, rightEdge, y, 0.3);
 
-  let pdf = `%PDF-1.4\n`;
-  const obj1 = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`;
-  const obj2 = `2 0 obj\n<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>\nendobj\n`;
-  const obj3 = `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R /Resources << /Font << /F1 7 0 R /F2 8 0 R >> >> >>\nendobj\n`;
-  const obj4 = `4 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 6 0 R /Resources << /Font << /F1 7 0 R /F2 8 0 R >> >> >>\nendobj\n`;
-  const obj5 = `5 0 obj\n<< /Length ${p1Stream.length - 16} >>\n${p1Stream}\nendobj\n`;
-  const obj6 = `6 0 obj\n<< /Length ${p2Stream.length - 16} >>\n${p2Stream}\nendobj\n`;
-  const obj7 = `7 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`;
-  const obj8 = `8 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n`;
+  // Venue rows
+  for (const v of data.venues) {
+    y -= 20;
+    page1.drawText(v.name, { x: margin, y, size: 10, font: regular, color: TEXT_DARK });
+    const amtW = bold.widthOfTextAtSize(`Rs. ${v.price}`, 10);
+    page1.drawText(`Rs. ${v.price}`, { x: rightEdge - amtW, y, size: 10, font: bold, color: TEXT_DARK });
+  }
 
-  const offsets = [];
-  offsets.push(pdf.length); pdf += obj1;
-  offsets.push(pdf.length); pdf += obj2;
-  offsets.push(pdf.length); pdf += obj3;
-  offsets.push(pdf.length); pdf += obj4;
-  offsets.push(pdf.length); pdf += obj5;
-  offsets.push(pdf.length); pdf += obj6;
-  offsets.push(pdf.length); pdf += obj7;
-  offsets.push(pdf.length); pdf += obj8;
+  // Total line
+  y -= 15;
+  drawLine(page1, margin, y, rightEdge, y, 1);
+  y -= 22;
+  page1.drawText("GRAND TOTAL", { x: margin, y, size: 13, font: bold, color: TEXT_DARK });
+  const totalW = bold.widthOfTextAtSize(`Rs. ${data.totalAmount}`, 15);
+  page1.drawText(`Rs. ${data.totalAmount}`, { x: rightEdge - totalW, y, size: 15, font: bold, color: PRIMARY });
 
-  const xrefPos = pdf.length;
-  pdf += `xref\n0 9\n0000000000 65535 f \n`;
-  offsets.forEach(off => {
-    pdf += `${String(off).padStart(10, '0')} 00000 n \n`;
+  // --- NOTES ---
+  y -= 35;
+  if (data.notes) {
+    page1.drawText("NOTES", { x: margin, y, size: 9, font: bold, color: PRIMARY });
+    y -= 16;
+    // Word-wrap notes to max 80 chars per line
+    const maxChars = 80;
+    const noteLines = [];
+    let remaining = data.notes;
+    while (remaining.length > maxChars) {
+      let breakAt = remaining.lastIndexOf(" ", maxChars);
+      if (breakAt === -1) breakAt = maxChars;
+      noteLines.push(remaining.substring(0, breakAt));
+      remaining = remaining.substring(breakAt + 1);
+    }
+    noteLines.push(remaining);
+    for (const line of noteLines) {
+      page1.drawText(line, { x: margin, y, size: 9, font: regular, color: TEXT_DARK });
+      y -= 14;
+    }
+  }
+
+  // --- FOOTER ---
+  const footerY = 85;
+  drawLine(page1, margin, footerY + 20, rightEdge, footerY + 20, 0.5);
+
+  page1.drawText(`Booked by: ${data.createdBy}  |  Created: ${new Date(data.createdAt).toLocaleString("en-IN")}`, {
+    x: margin, y: footerY + 6, size: 7.5, font: regular, color: TEXT_MUTED,
   });
-  pdf += `trailer\n<< /Size 9 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+  page1.drawText(biz.address, {
+    x: margin, y: footerY - 8, size: 7.5, font: regular, color: TEXT_MUTED,
+  });
+  page1.drawText(`P: ${biz.phone} | E: ${biz.email}`, {
+    x: margin, y: footerY - 20, size: 7.5, font: regular, color: TEXT_MUTED,
+  });
 
-  return new TextEncoder().encode(pdf);
+  const pageNumW = regular.widthOfTextAtSize("Page 1/2", 7.5);
+  page1.drawText("Page 1/2", {
+    x: rightEdge - pageNumW, y: footerY - 20, size: 7.5, font: regular, color: TEXT_MUTED,
+  });
+
+  // --- SIGNATURE LINES ---
+  const sigY = 48;
+  drawLine(page1, margin, sigY, margin + 160, sigY, 0.5);
+  page1.drawText("Customer Signature", {
+    x: margin + 30, y: sigY - 14, size: 7.5, font: regular, color: TEXT_MUTED,
+  });
+  drawLine(page1, rightEdge - 160, sigY, rightEdge, sigY, 0.5);
+  page1.drawText("Authorized Signature & Stamp", {
+    x: rightEdge - 155, y: sigY - 14, size: 7.5, font: regular, color: TEXT_MUTED,
+  });
+
+  // ===== PAGE 2: TERMS & CONDITIONS =====
+  const page2 = pdfDoc.addPage([595, 842]);
+  const w2 = page2.getSize().width;
+  const h2 = page2.getSize().height;
+  const m2 = 45;
+  const r2 = w2 - m2;
+
+  // Header bar
+  page2.drawRectangle({ x: 0, y: h2 - 60, width: w2, height: 60, color: PRIMARY });
+  page2.drawText("TERMS & CONDITIONS", {
+    x: m2, y: h2 - 40, size: 18, font: bold, color: WHITE,
+  });
+
+  const rules = [
+    "BOOKING ADVANCE: 50% of the total amount must be paid to confirm the booking slot.",
+    "FINAL PAYMENT: Remaining balance is due exactly 7 days prior to the event date.",
+    "CANCELLATION: No refund if cancelled within 15 days of event. 50% refund if cancelled 30+ days before.",
+    "ELECTRICITY: AC usage charges are calculated as per actual meter readings, billed separately.",
+    "CLEANING: A mandatory cleaning fee of Rs. 1,000 is included in every booking.",
+    "DECORATIONS: Strictly no nails, tape, or permanent markings on walls, pillars, or ceilings.",
+    "MUSIC/SOUND: Volume must adhere to legal limits; no loud music permitted after 10:00 PM.",
+    "DAMAGES: Any property damage will be billed directly to the primary customer on the booking.",
+    "VALUABLES: Management is not responsible for loss of personal cash, jewelry, or other valuables.",
+    "LIQUOR: Consumption of alcohol is strictly prohibited within the venue premises.",
+  ];
+
+  let ry = h2 - 90;
+  for (let i = 0; i < rules.length; i++) {
+    page2.drawText(`${i + 1}.`, { x: m2, y: ry, size: 10, font: bold, color: PRIMARY });
+
+    // Word-wrap each rule
+    const maxW = 75;
+    let text = rules[i]!;
+    const lines: string[] = [];
+    while (text.length > maxW) {
+      let breakAt = text.lastIndexOf(" ", maxW);
+      if (breakAt === -1) breakAt = maxW;
+      lines.push(text.substring(0, breakAt));
+      text = text.substring(breakAt + 1);
+    }
+    lines.push(text);
+
+    for (const line of lines) {
+      page2.drawText(line, { x: m2 + 22, y: ry, size: 9.5, font: regular, color: TEXT_DARK });
+      ry -= 15;
+    }
+    ry -= 8;
+  }
+
+  // Acknowledgement
+  ry -= 15;
+  page2.drawText("ACKNOWLEDGEMENT", { x: m2, y: ry, size: 10, font: bold, color: PRIMARY });
+  ry -= 18;
+  page2.drawText("I have read and agree to follow all the rules and conditions mentioned above.", {
+    x: m2, y: ry, size: 9.5, font: regular, color: TEXT_DARK,
+  });
+
+  // Signature
+  ry -= 50;
+  drawLine(page2, m2, ry, m2 + 200, ry, 0.5);
+  page2.drawText("Customer Signature", { x: m2 + 50, y: ry - 14, size: 8, font: regular, color: TEXT_MUTED });
+
+  drawLine(page2, r2 - 150, ry, r2, ry, 0.5);
+  page2.drawText("Date", { x: r2 - 120, y: ry - 14, size: 8, font: regular, color: TEXT_MUTED });
+
+  // Page 2 footer
+  drawLine(page2, m2, 70, r2, 70, 0.5);
+  page2.drawText(biz.name, { x: m2, y: 55, size: 7.5, font: regular, color: TEXT_MUTED });
+  const p2numW = regular.widthOfTextAtSize("Page 2/2", 7.5);
+  page2.drawText("Page 2/2", { x: r2 - p2numW, y: 55, size: 7.5, font: regular, color: TEXT_MUTED });
+
+  return pdfDoc.save();
 }

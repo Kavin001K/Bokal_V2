@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { signToken } from "../lib/auth.js";
-import { requireAuth } from "../middlewares/auth.js";
+import { requireAuth, requireAdmin } from "../middlewares/auth.js";
 
 const router = Router();
 
@@ -96,6 +96,34 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
   res.json({ success: true, message: "Password changed successfully" });
 });
 
+router.post("/auth/reset-password/:userId", requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const { newPassword } = req.body as { newPassword?: string };
+
+  if (!newPassword || newPassword.length < 6) {
+    res.status(400).json({ error: "Bad Request", message: "New password must be at least 6 characters" });
+    return;
+  }
+
+  const user = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, userId!))
+    .limit(1);
+
+  if (!user[0]) {
+    res.status(404).json({ error: "Not Found", message: "User not found" });
+    return;
+  }
+
+  const hash = await bcrypt.hash(newPassword, 12);
+  await db
+    .update(usersTable)
+    .set({ passwordHash: hash, mustChangePw: true })
+    .where(eq(usersTable.id, userId!));
+
+  res.json({ success: true, message: "Password reset successfully. User must change on next login." });
+});
 router.get("/auth/profile", requireAuth, async (req, res) => {
   const user = await db
     .select()

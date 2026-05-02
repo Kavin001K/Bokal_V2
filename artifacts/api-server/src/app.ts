@@ -43,9 +43,42 @@ app.get("/", (_req, res) => {
   });
 });
 
+import { db, bookingsTable } from "@workspace/db";
+import { and, eq, lt } from "drizzle-orm";
+
 app.use("/api", router);
 
 seedIfEmpty().catch((err) => logger.error({ err }, "Seed failed"));
+
+// Auto-complete past bookings — runs every hour
+async function autoCompletePastBookings() {
+  try {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const cutoffDate = yesterday.toISOString().split("T")[0]!;
+
+    const result = await db
+      .update(bookingsTable)
+      .set({ status: "completed", updatedAt: new Date() })
+      .where(
+        and(
+          eq(bookingsTable.status, "confirmed"),
+          lt(bookingsTable.bookingDate, cutoffDate)
+        )
+      )
+      .returning({ id: bookingsTable.id });
+
+    if (result.length > 0) {
+      logger.info({ count: result.length }, "Auto-completed past bookings");
+    }
+  } catch (err) {
+    logger.error({ err }, "Auto-complete cron error");
+  }
+}
+
+// Run immediately on startup, then every hour
+autoCompletePastBookings();
+setInterval(autoCompletePastBookings, 60 * 60 * 1000);
 
 // Global Error Handler
 app.use((err: any, _req: any, res: any, _next: any) => {

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, and, gte, lte, or, ilike, desc, sql, ne } from "drizzle-orm";
-import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable, auditLogsTable, bookingPdfsTable } from "@workspace/db";
+import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable, auditLogsTable, bookingPdfsTable, settingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
 import { generatePremiumBookingPdf } from "../lib/pdf-generator.js";
 
@@ -437,82 +437,76 @@ router.delete("/bookings/:id", requireAuth, async (req, res) => {
   res.json({ success: true, message: "Booking cancelled" });
 });
 
-import { uploadBookingPdf } from "../lib/storage.js";
-
 // PDF generation endpoint — generates a professional 2-page PDF receipt
 // Supports token in query for direct browser downloads
 router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
   const { id } = req.params;
 
-  // Fetch booking data (try by UUID or by BookingRef)
-  let booking = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
-  if (!booking[0]) {
-    booking = await db.select().from(bookingsTable).where(eq(bookingsTable.bookingRef, id!)).limit(1);
-  }
-  
-  if (!booking[0]) {
-    res.status(404).json({ error: "Booking not found" });
-    return;
-  }
-  const b = booking[0];
-
-  // Fetch business settings for branding
-  const settingsRows = await db.select().from(settingsTable);
-  const settings: Record<string, string> = {};
-  settingsRows.forEach(s => settings[s.key] = s.value);
-
-  const venueRows = await db
-    .select({ venueName: venuesTable.name, pricePerHour: bookingVenuesTable.pricePerHour, subtotal: bookingVenuesTable.subtotal })
-    .from(bookingVenuesTable)
-    .innerJoin(venuesTable, eq(bookingVenuesTable.venueId, venuesTable.id))
-    .where(eq(bookingVenuesTable.bookingId, id!));
-
-  const createdBy = await db.select().from(usersTable).where(eq(usersTable.id, b.createdById)).limit(1);
-
-  const venueList = venueRows.map((v) => ({
-    name: v.venueName,
-    price: Number(v.subtotal).toLocaleString('en-IN')
-  }));
-
-  const pdfBuffer = generatePremiumBookingPdf({
-    bookingRef: b.bookingRef,
-    customerName: b.customerName,
-    phones: (b.phoneNumbers as string[]).join(", "),
-    address: b.address ?? "N/A",
-    bookingDate: new Date(b.bookingDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }),
-    tamilDate: b.tamilDateLabel ?? "",
-    startTime: b.startTime,
-    endTime: b.endTime,
-    duration: String(b.durationHours),
-    venues: venueList,
-    totalAmount: Number(b.totalAmount).toLocaleString('en-IN'),
-    notes: b.notes ?? "",
-    createdBy: createdBy[0]?.fullName ?? "Unknown",
-    createdAt: b.createdAt.toISOString(),
-    business: {
-      name: settings.biz_name || "MahalBook Venue",
-      tagline: settings.biz_tagline || "Excellence in Event Hosting",
-      address: settings.biz_address || "123 Main Street, Tamil Nadu",
-      phone: settings.biz_phone || "+91 98765 43210",
-      email: settings.biz_email || "contact@mahalbook.app",
-      gst: settings.biz_gst || "33AAAAA0000A1Z5"
+  try {
+    // Fetch booking data (try by UUID or by BookingRef)
+    let booking = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+    if (!booking[0]) {
+      booking = await db.select().from(bookingsTable).where(eq(bookingsTable.bookingRef, id!)).limit(1);
     }
-  });
+    
+    if (!booking[0]) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    const b = booking[0];
 
-  const fileName = `Receipt_${b.bookingRef}_${b.customerName.replace(/\s+/g, '_')}.pdf`;
+    // Fetch business settings for branding
+    const settingsRows = await db.select().from(settingsTable);
+    const settings: Record<string, string> = {};
+    settingsRows.forEach(s => settings[s.key] = s.value);
 
-  // Upload to Supabase Storage for CDN speed
-  const publicUrl = await uploadBookingPdf(fileName, pdfBuffer);
+    const venueRows = await db
+      .select({ venueName: venuesTable.name, pricePerHour: bookingVenuesTable.pricePerHour, subtotal: bookingVenuesTable.subtotal })
+      .from(bookingVenuesTable)
+      .innerJoin(venuesTable, eq(bookingVenuesTable.venueId, venuesTable.id))
+      .where(eq(bookingVenuesTable.bookingId, b.id));
 
-  if (publicUrl) {
-    // Redirect to Supabase for instant download
-    return res.redirect(publicUrl);
+    const createdBy = await db.select().from(usersTable).where(eq(usersTable.id, b.createdById)).limit(1);
+
+    const venueList = venueRows.map((v) => ({
+      name: v.venueName,
+      price: Number(v.subtotal).toLocaleString('en-IN')
+    }));
+
+    const pdfBytes = await generatePremiumBookingPdf({
+      bookingRef: b.bookingRef,
+      customerName: b.customerName,
+      phones: (b.phoneNumbers as string[]).join(", "),
+      address: b.address ?? "N/A",
+      bookingDate: new Date(b.bookingDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }),
+      tamilDate: b.tamilDateLabel ?? "",
+      startTime: b.startTime,
+      endTime: b.endTime,
+      duration: String(b.durationHours),
+      venues: venueList,
+      totalAmount: Number(b.totalAmount).toLocaleString('en-IN'),
+      notes: b.notes ?? "",
+      createdBy: createdBy[0]?.fullName ?? "Unknown",
+      createdAt: b.createdAt.toISOString(),
+      business: {
+        name: settings.biz_name || "Bookal Venue",
+        tagline: settings.biz_tagline || "Venue Booking Made Simple",
+        address: settings.biz_address || "Tamil Nadu, India",
+        phone: settings.biz_phone || "+91 98765 43210",
+        email: settings.biz_email || "contact@bookal.app",
+        gst: settings.biz_gst || ""
+      }
+    });
+
+    const fileName = `Receipt_${b.bookingRef}_${b.customerName.replace(/[^a-zA-Z0-9 ._-]/g, '').replace(/\s+/g, '_')}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader("Content-Length", pdfBytes.length);
+    res.send(Buffer.from(pdfBytes));
+  } catch (err) {
+    res.status(500).json({ error: "Failed to generate PDF" });
   }
-
-  // Fallback to direct stream if upload fails
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-  res.send(Buffer.from(pdfBuffer));
 });
 
 export default router;
