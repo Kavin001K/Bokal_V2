@@ -72,7 +72,7 @@ async function generateAndStoreBookingPdf(id: string) {
     // Determine if id is a UUID or a BookingRef
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
     
-    let bookingResult = [];
+    let bookingResult: any[] = [];
     if (isUuid) {
       bookingResult = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
     }
@@ -159,7 +159,7 @@ async function generateAndStoreBookingPdf(id: string) {
 
     return { buffer: finalPdf, fileName: pdfFileName };
   } catch (err) {
-    logger.error({ err, bookingId }, "generateAndStoreBookingPdf failed");
+    logger.error({ err, bookingId: id }, "generateAndStoreBookingPdf failed");
     throw err;
   }
 }

@@ -117,7 +117,7 @@ function drawIcon(page: PDFPage, type: string, x: number, y: number, size: numbe
     page.drawCircle({ x, y: y + 2, size: s/3, borderColor: color, borderWidth: 1.2 });
     page.drawLine({ start: { x, y: y - h }, end: { x, y: y + 2 }, thickness: 1.2, color });
   } else if (type === "phone") {
-    page.drawRectangle({ x: x - 3, y: y - h, width: 6, height: s, borderColor: color, borderWidth: 1, borderRadius: 1 });
+    page.drawRectangle({ x: x - 3, y: y - h, width: 6, height: s, borderColor: color, borderWidth: 1 });
   } else if (type === "mail") {
     page.drawRectangle({ x: x - h, y: y - 3, width: s, height: s - 3, borderColor: color, borderWidth: 1.2 });
     page.drawLine({ start: { x: x - h, y: y + h - 3 }, end: { x: x, y: y - 1 }, thickness: 1, color });
@@ -137,7 +137,7 @@ function drawIcon(page: PDFPage, type: string, x: number, y: number, size: numbe
   } else if (type === "clock") {
     page.drawCircle({ x, y, size: h, borderColor: color, borderWidth: 1.2 });
     page.drawLine({ start: { x, y }, end: { x, y: y + h - 3 }, thickness: 1.2, color });
-    page.drawLine({ start: { x, y }, end: { x + h - 4, y }, thickness: 1.2, color });
+    page.drawLine({ start: { x, y }, end: { x: x + h - 4, y }, thickness: 1.2, color });
   }
 }
 
@@ -226,12 +226,12 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
       // Ref Badge
       const refText = `REF: ${data.bookingRef}`;
       const refW = bold.widthOfTextAtSize(refText, 11);
-      p.drawRectangle({ x: WIDTH - MARGIN - refW - 24, y: HEIGHT - 155, width: refW + 24, height: 26, color: COLORS.ACCENT, borderRadius: 4 });
+      p.drawRectangle({ x: WIDTH - MARGIN - refW - 24, y: HEIGHT - 155, width: refW + 24, height: 26, color: COLORS.ACCENT });
       p.drawText(refText, { x: WIDTH - MARGIN - refW - 12, y: HEIGHT - 147, size: 11, font: bold, color: COLORS.WHITE });
     };
 
     const drawFooter = (p: PDFPage, pageNum: number) => {
-      p.drawRectangle({ x: MARGIN, y: 20, width: WIDTH - MARGIN * 2, height: 30, color: COLORS.BG_LIGHT, borderRadius: 8 });
+      p.drawRectangle({ x: MARGIN, y: 20, width: WIDTH - MARGIN * 2, height: 30, color: COLORS.BG_LIGHT });
       p.drawText(`Page ${pageNum}`, { x: WIDTH / 2 - 20, y: 30, size: 9, font: regular, color: COLORS.TEXT_MUTED });
       p.drawText(`Generated: ${new Date().toLocaleDateString()}`, { x: MARGIN + 15, y: 30, size: 8, font: regular, color: COLORS.TEXT_MUTED });
       p.drawText("Bookal Management System", { x: WIDTH - MARGIN - 120, y: 30, size: 8, font: regular, color: COLORS.TEXT_MUTED });
@@ -253,7 +253,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
     const cardH = 150;
 
     // Card 1: Client
-    page.drawRectangle({ x: MARGIN, y: y - cardH, width: colW, height: cardH, color: COLORS.WHITE, borderColor: COLORS.BORDER, borderWidth: 1, borderRadius: 10 });
+    page.drawRectangle({ x: MARGIN, y: y - cardH, width: colW, height: cardH, color: COLORS.WHITE, borderColor: COLORS.BORDER, borderWidth: 1 });
     drawSectionHeader(page, "CLIENT INFORMATION", "user", MARGIN + 10, y - 5, bold);
     
     let cardY = y - 40;
@@ -273,7 +273,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
 
     // Card 2: Schedule
     const col2X = MARGIN + colW + 30;
-    page.drawRectangle({ x: col2X, y: y - cardH, width: colW, height: cardH, color: COLORS.WHITE, borderColor: COLORS.BORDER, borderWidth: 1, borderRadius: 10 });
+    page.drawRectangle({ x: col2X, y: y - cardH, width: colW, height: cardH, color: COLORS.WHITE, borderColor: COLORS.BORDER, borderWidth: 1 });
     drawSectionHeader(page, "EVENT SCHEDULE", "calendar", col2X + 10, y - 5, bold);
     
     cardY = y - 40;
@@ -289,7 +289,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
     y -= 30;
 
     // Table Header
-    page.drawRectangle({ x: MARGIN, y: y - 25, width: WIDTH - MARGIN * 2, height: 25, color: COLORS.BG_LIGHT, borderRadius: 5 });
+    page.drawRectangle({ x: MARGIN, y: y - 25, width: WIDTH - MARGIN * 2, height: 25, color: COLORS.BG_LIGHT });
     page.drawText("Description / Venue Name", { x: MARGIN + 15, y: y - 17, size: 10, font: bold, color: COLORS.ACCENT });
     page.drawText("Subtotal (Rs.)", { x: WIDTH - MARGIN - 100, y: y - 17, size: 10, font: bold, color: COLORS.ACCENT });
     y -= 35;
@@ -302,7 +302,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
         drawHeader(page);
         y = HEIGHT - 220;
         // Repeat table header
-        page.drawRectangle({ x: MARGIN, y: y - 25, width: WIDTH - MARGIN * 2, height: 25, color: COLORS.BG_LIGHT, borderRadius: 5 });
+        page.drawRectangle({ x: MARGIN, y: y - 25, width: WIDTH - MARGIN * 2, height: 25, color: COLORS.BG_LIGHT });
         page.drawText("Description / Venue Name", { x: MARGIN + 15, y: y - 17, size: 10, font: bold, color: COLORS.ACCENT });
         page.drawText("Subtotal (Rs.)", { x: WIDTH - MARGIN - 100, y: y - 17, size: 10, font: bold, color: COLORS.ACCENT });
         y -= 35;
@@ -329,7 +329,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
     }
 
     const totalBoxH = 100;
-    page.drawRectangle({ x: MARGIN, y: y - totalBoxH, width: WIDTH - MARGIN * 2, height: totalBoxH, color: COLORS.WHITE, borderColor: COLORS.ACCENT, borderWidth: 1.5, borderRadius: 12 });
+    page.drawRectangle({ x: MARGIN, y: y - totalBoxH, width: WIDTH - MARGIN * 2, height: totalBoxH, color: COLORS.WHITE, borderColor: COLORS.ACCENT, borderWidth: 1.5 });
     
     // Left side: Advance & Balance
     const totalVal = parseFloat(data.totalAmount.replace(/,/g, '')) || 0;

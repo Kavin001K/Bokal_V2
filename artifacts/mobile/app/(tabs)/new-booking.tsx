@@ -380,7 +380,11 @@ export default function NewBookingScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ 
+          padding: 16, 
+          paddingBottom: insets.bottom + 180, // Increased to fully clear the footer
+          flexGrow: 1 
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
