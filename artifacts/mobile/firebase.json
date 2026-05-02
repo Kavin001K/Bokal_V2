@@ -6,7 +6,27 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "cleanUrls": true,
+    "headers": [
+      {
+        "source": "**/*.@(ttf|otf|woff|woff2)",
+        "headers": [
+          {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "max-age=31536000"
+          }
+        ]
+      }
+    ],
     "rewrites": [
+      {
+        "source": "/assets/**",
+        "destination": "/assets/**"
+      },
       {
         "source": "**",
         "destination": "/index.html"

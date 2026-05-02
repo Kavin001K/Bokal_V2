@@ -30,7 +30,11 @@ app.use(
 
 // --- PRODUCTION OPTIMIZATION ---
 app.use(cors({
-  origin: "*", // Allow all origins for mobile app compatibility
+  origin: [
+    "https://bookal-erp-v123.web.app",
+    "https://bookal-erp-v123.firebaseapp.com",
+    "https://bookal.onrender.com"
+  ],
   credentials: true,
 }));
 
