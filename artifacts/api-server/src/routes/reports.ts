@@ -8,8 +8,8 @@ const router = Router();
 router.get("/reports/summary", requireAdmin, async (req, res) => {
   const { from, to } = req.query as { from: string; to: string };
 
-  if (!from || !to) {
-    res.status(400).json({ error: "from and to are required" });
+  if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    res.status(400).json({ error: "Valid 'from' and 'to' dates (YYYY-MM-DD) are required" });
     return;
   }
 
@@ -85,6 +85,11 @@ router.get("/reports/summary", requireAdmin, async (req, res) => {
 
 router.get("/reports/export", requireAdmin, async (req, res) => {
   const { from, to } = req.query as { from: string; to: string };
+
+  if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    res.status(400).json({ error: "Valid 'from' and 'to' dates (YYYY-MM-DD) are required" });
+    return;
+  }
 
   const bookings = await db
     .select({

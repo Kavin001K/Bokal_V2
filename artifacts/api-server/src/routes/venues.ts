@@ -28,7 +28,7 @@ router.put("/venues/:id/price", requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { pricePerHour } = req.body as { pricePerHour: number };
 
-  if (!pricePerHour || pricePerHour < 0) {
+  if (pricePerHour === undefined || pricePerHour === null || pricePerHour < 0 || isNaN(pricePerHour)) {
     res.status(400).json({ error: "Invalid price" });
     return;
   }

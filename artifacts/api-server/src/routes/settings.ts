@@ -24,9 +24,15 @@ router.get("/settings", requireAdmin, async (req, res) => {
   });
 });
 
+const ALLOWED_SETTINGS_KEYS = new Set([
+  "default_duration_hours", "session_timeout_hours", "rules_pdf_path",
+  "biz_name", "biz_tagline", "biz_address", "biz_phone", "biz_email", "biz_gst",
+]);
+
 router.put("/settings", requireAdmin, async (req, res) => {
   const updates = req.body as Record<string, string>;
   for (const [key, value] of Object.entries(updates)) {
+    if (!ALLOWED_SETTINGS_KEYS.has(key)) continue; // Skip unknown keys
     await db
       .insert(settingsTable)
       .values({ key, value: String(value) })

@@ -1,8 +1,14 @@
 import { Router } from "express";
-import { eq, and, gte, lte, or, ilike, desc, sql, ne } from "drizzle-orm";
+import { eq, and, gte, lte, or, ilike, desc, sql, ne, inArray } from "drizzle-orm";
 import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable, auditLogsTable, bookingPdfsTable, settingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
 import { generatePremiumBookingPdf } from "../lib/pdf-generator.js";
+import { logger } from "../lib/logger.js";
+
+// Escape LIKE special characters to prevent pattern injection
+function escapeLike(str: string): string {
+  return str.replace(/[%_\\]/g, '\\$&');
+}
 
 const router = Router();
 
@@ -12,18 +18,27 @@ function calcDuration(startTime: string, endTime: string): number {
   return (eh! * 60 + em! - sh! * 60 - sm!) / 60;
 }
 
+// Format a YYYY-MM-DD string safely without UTC timezone shift
+function formatDateSafe(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${String(d).padStart(2, "0")} ${months[m! - 1]} ${y}`;
+}
+
 async function generateBookingRef(): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `MBK-${year}-`;
-  const lastBooking = await db
-    .select({ bookingRef: bookingsTable.bookingRef })
+  // Use SQL MAX to get highest ref atomically — avoids race condition duplicates
+  const result = await db
+    .select({
+      maxRef: sql<string>`MAX(${bookingsTable.bookingRef})`
+    })
     .from(bookingsTable)
-    .where(sql`${bookingsTable.bookingRef} LIKE ${prefix + "%"}`)
-    .orderBy(desc(bookingsTable.createdAt))
-    .limit(1);
+    .where(sql`${bookingsTable.bookingRef} LIKE ${prefix + "%"}`);
 
-  const lastNum = lastBooking[0]
-    ? parseInt(lastBooking[0].bookingRef.split("-")[2] ?? "0")
+  const maxRef = result[0]?.maxRef;
+  const lastNum = maxRef
+    ? parseInt(maxRef.split("-").pop() ?? "0")
     : 0;
   return `${prefix}${String(lastNum + 1).padStart(4, "0")}`;
 }
@@ -137,10 +152,11 @@ router.get("/bookings", requireAuth, async (req, res) => {
   if (from) conditions.push(gte(bookingsTable.bookingDate, from));
   if (to) conditions.push(lte(bookingsTable.bookingDate, to));
   if (search) {
+    const escaped = escapeLike(search);
     conditions.push(
       or(
-        ilike(bookingsTable.customerName, `%${search}%`),
-        sql`${bookingsTable.phoneNumbers}::text ILIKE ${"%" + search + "%"}`
+        ilike(bookingsTable.customerName, `%${escaped}%`),
+        sql`${bookingsTable.phoneNumbers}::text ILIKE ${"%" + escaped + "%"}`
       )
     );
   }
@@ -183,11 +199,11 @@ router.get("/bookings", requireAuth, async (req, res) => {
       })
       .from(bookingVenuesTable)
       .innerJoin(venuesTable, eq(bookingVenuesTable.venueId, venuesTable.id))
-      .where(sql`${bookingVenuesTable.bookingId} = ANY(${sql.raw(`ARRAY[${bookingIds.map((id) => `'${id}'`).join(",")}]::uuid[]`)})`),
+      .where(inArray(bookingVenuesTable.bookingId, bookingIds)),
     db
       .select()
       .from(usersTable)
-      .where(sql`${usersTable.id} = ANY(${sql.raw(`ARRAY[${createdByIds.map((id) => `'${id}'`).join(",")}]::uuid[]`)})`),
+      .where(inArray(usersTable.id, createdByIds)),
   ]);
 
   const venuesByBooking = new Map<string, typeof allVenueRows>();
@@ -257,6 +273,28 @@ router.post("/bookings", requireAuth, async (req, res) => {
       venues: Array<{ venueId: string; pricePerHour: number }>;
       notes?: string;
     };
+
+  // Input validation
+  if (!customerName?.trim()) {
+    res.status(400).json({ error: "Bad Request", message: "Customer name is required" });
+    return;
+  }
+  if (!phoneNumbers?.length || !phoneNumbers[0]?.trim()) {
+    res.status(400).json({ error: "Bad Request", message: "At least one phone number is required" });
+    return;
+  }
+  if (!bookingDate || !/^\d{4}-\d{2}-\d{2}$/.test(bookingDate)) {
+    res.status(400).json({ error: "Bad Request", message: "Invalid booking date format (YYYY-MM-DD)" });
+    return;
+  }
+  if (!startTime || !endTime || !/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
+    res.status(400).json({ error: "Bad Request", message: "Invalid time format (HH:MM)" });
+    return;
+  }
+  if (!venues?.length) {
+    res.status(400).json({ error: "Bad Request", message: "At least one venue is required" });
+    return;
+  }
 
   const durationHours = calcDuration(startTime, endTime);
   if (durationHours <= 0) {
@@ -420,13 +458,29 @@ router.delete("/bookings/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body as { reason: string };
 
+  if (!reason?.trim()) {
+    res.status(400).json({ error: "Bad Request", message: "Cancellation reason is required" });
+    return;
+  }
+
+  // Verify booking exists and is cancellable
+  const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+  if (!existing[0]) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  if (existing[0].status === "cancelled") {
+    res.status(409).json({ error: "Conflict", message: "Booking is already cancelled" });
+    return;
+  }
+
   await db
     .update(bookingsTable)
     .set({
       status: "cancelled",
       cancelledAt: new Date(),
       cancelledById: req.user!.userId,
-      cancelReason: reason,
+      cancelReason: reason.trim(),
       updatedAt: new Date(),
     })
     .where(eq(bookingsTable.id, id!));
@@ -478,7 +532,7 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
       customerName: b.customerName,
       phones: (b.phoneNumbers as string[]).join(", "),
       address: b.address ?? "N/A",
-      bookingDate: new Date(b.bookingDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }),
+      bookingDate: formatDateSafe(b.bookingDate),
       tamilDate: b.tamilDateLabel ?? "",
       startTime: b.startTime,
       endTime: b.endTime,
@@ -505,6 +559,7 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
     res.setHeader("Content-Length", pdfBytes.length);
     res.send(Buffer.from(pdfBytes));
   } catch (err) {
+    logger.error({ err, bookingId: id }, "PDF generation failed");
     res.status(500).json({ error: "Failed to generate PDF" });
   }
 });

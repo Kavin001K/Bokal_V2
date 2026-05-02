@@ -79,7 +79,14 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
     return;
   }
 
-  if (!user[0].mustChangePw && currentPassword) {
+  // Always require current password UNLESS this is a forced first-login change
+  if (user[0].mustChangePw) {
+    // First-login forced change — skip current password check
+  } else {
+    if (!currentPassword) {
+      res.status(400).json({ error: "Bad Request", message: "Current password is required" });
+      return;
+    }
     const valid = await bcrypt.compare(currentPassword, user[0].passwordHash);
     if (!valid) {
       res.status(400).json({ error: "Bad Request", message: "Current password incorrect" });
@@ -174,7 +181,17 @@ router.put("/auth/profile", requireAuth, async (req, res) => {
     return;
   }
 
-  res.json({ success: true, user: updated });
+  res.json({
+    success: true,
+    user: {
+      id: updated.id,
+      fullName: updated.fullName,
+      email: updated.email,
+      phoneNumber: updated.phoneNumber,
+      dateOfBirth: updated.dateOfBirth,
+      role: updated.role,
+    },
+  });
 });
 
 export default router;
