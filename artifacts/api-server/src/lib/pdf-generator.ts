@@ -64,20 +64,6 @@ const BORDER = rgb(0.91, 0.87, 0.83); // #E8DDD4
 const WHITE = rgb(1, 1, 1);
 const BG_LIGHT = rgb(0.99, 0.97, 0.95); // #FDF8F3
 
-function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number, thickness = 0.5, color = BORDER) {
-  page.drawLine({
-    start: { x: x1, y: y1 },
-    end: { x: x2, y: y2 },
-    thickness,
-    color,
-  });
-}
-
-function drawSectionIcon(page: PDFPage, x: number, y: number, color = ACCENT) {
-  // Simple circle icon background
-  page.drawCircle({ x, y, size: 12, color, opacity: 1 });
-}
-
 function wrapText(text: string, maxWidth: number, font: PDFFont, fontSize: number): string[] {
   const words = text.split(" ");
   const lines: string[] = [];
@@ -95,6 +81,55 @@ function wrapText(text: string, maxWidth: number, font: PDFFont, fontSize: numbe
   }
   if (currentLine) lines.push(currentLine);
   return lines;
+}
+
+function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number, thickness = 0.5, color = BORDER) {
+  page.drawLine({
+    start: { x: x1, y: y1 },
+    end: { x: x2, y: y2 },
+    thickness,
+    color,
+  });
+}
+
+/**
+ * Custom vector icon drawer for premium aesthetics.
+ */
+function drawIcon(page: PDFPage, type: string, x: number, y: number, size: number, color = WHITE) {
+  const s = size;
+  const h = s / 2;
+  
+  if (type === "user") {
+    page.drawCircle({ x, y: y + s/4, size: s/4, color }); // head
+    page.drawEllipse({ x, y: y - s/4, xScale: s/2, yScale: s/4, color }); // shoulders
+  } else if (type === "calendar") {
+    page.drawRectangle({ x: x - h, y: y - h, width: s, height: s, borderColor: color, borderWidth: 1.5 });
+    page.drawLine({ start: { x: x - h, y: y + h - 4 }, end: { x: x + h, y: y + h - 4 }, thickness: 1.5, color });
+    page.drawCircle({ x: x - h/2, y: y + h, size: 2, color });
+    page.drawCircle({ x: x + h/2, y: y + h, size: 2, color });
+  } else if (type === "building") {
+    page.drawRectangle({ x: x - h, y: y - h, width: s, height: s, borderColor: color, borderWidth: 1.5 });
+    page.drawRectangle({ x: x - 2, y: y - h, width: 4, height: 6, color }); // door
+  } else if (type === "document") {
+    page.drawRectangle({ x: x - h + 2, y: y - h, width: s - 4, height: s, borderColor: color, borderWidth: 1.5 });
+    page.drawLine({ start: { x: x - 2, y: y + 2 }, end: { x: x + 2, y: y + 2 }, thickness: 1, color });
+    page.drawLine({ start: { x: x - 2, y: y }, end: { x: x + 2, y: y }, thickness: 1, color });
+  } else if (type === "pin") {
+    page.drawCircle({ x, y: y + 2, size: s/3, borderColor: color, borderWidth: 1.5 });
+    page.drawLine({ start: { x, y: y - h }, end: { x, y: y + 2 }, thickness: 1.5, color });
+  } else if (type === "phone") {
+    page.drawRectangle({ x: x - 3, y: y - h, width: 6, height: s, borderColor: color, borderWidth: 1, borderRadius: 1 });
+    page.drawCircle({ x, y: y - h + 2, size: 1, color });
+  } else if (type === "mail") {
+    page.drawRectangle({ x: x - h, y: y - 4, width: s, height: s - 4, borderColor: color, borderWidth: 1.5 });
+    page.drawLine({ start: { x: x - h, y: y + h - 4 }, end: { x, y }, thickness: 1, color });
+    page.drawLine({ start: { x: x + h, y: y + h - 4 }, end: { x, y }, thickness: 1, color });
+  }
+}
+
+function drawSectionIcon(page: PDFPage, type: string, x: number, y: number, color = ACCENT) {
+  page.drawCircle({ x, y, size: 14, color, opacity: 1 });
+  drawIcon(page, type, x, y, 12, WHITE);
 }
 
 export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<Uint8Array> {
@@ -118,56 +153,66 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
     const rightEdge = width - margin;
 
     // --- 1. HEADER: PREMIUM CURVED SHAPE ---
-    const headerHeight = 160;
-    // Main rectangle
+    const headerHeight = 180;
     page1.drawRectangle({ x: 0, y: height - headerHeight, width, height: headerHeight, color: PRIMARY });
     
-    // Draw the curve (overlaying with a lighter brown or path)
+    // Smooth Wave Sweep (Bottom right to top left)
     page1.drawEllipse({
-      x: width + 20,
-      y: height - 60,
-      xScale: 250,
-      yScale: 200,
+      x: width + 40,
+      y: height - 40,
+      xScale: 300,
+      yScale: 250,
       color: ACCENT,
-      opacity: 0.3
+      opacity: 0.25
+    });
+    page1.drawEllipse({
+      x: width + 60,
+      y: height - 20,
+      xScale: 280,
+      yScale: 220,
+      color: WHITE,
+      opacity: 0.1
     });
 
     // Logo & Name (Left)
-    // Draw Hexagon for Logo "B"
-    const hexX = margin + 20;
-    const hexY = height - 80;
-    const s = 18; // size
-    page1.drawRectangle({
-      x: hexX - s/2,
-      y: hexY - s/2,
-      width: s,
-      height: s,
-      borderColor: WHITE,
-      borderWidth: 2,
-      rotate: { type: 'degrees', angle: 45 }
-    });
-    page1.drawText("B", { x: hexX - 7, y: hexY - 8, size: 20, font: bold, color: WHITE });
+    // Precise Hexagon Logo
+    const hexX = margin + 25;
+    const hexY = height - 85;
+    const s = 22; 
+    const c30 = 0.866; // cos(30)
+    const s30 = 0.5;   // sin(30)
+    const hPts = [
+      { x: hexX, y: hexY + s },
+      { x: hexX + s * c30, y: hexY + s * s30 },
+      { x: hexX + s * c30, y: hexY - s * s30 },
+      { x: hexX, y: hexY - s },
+      { x: hexX - s * c30, y: hexY - s * s30 },
+      { x: hexX - s * c30, y: hexY + s * s30 }
+    ];
+    for (let i = 0; i < 6; i++) {
+      page1.drawLine({ start: hPts[i], end: hPts[(i+1)%6], thickness: 2.5, color: WHITE });
+    }
+    page1.drawText("B", { x: hexX - 7, y: hexY - 7, size: 22, font: bold, color: WHITE });
     
-    page1.drawText(cleanText(biz.name), { x: margin + 55, y: height - 88, size: 38, font: bold, color: WHITE });
-    page1.drawText(cleanText(biz.tagline), { x: margin + 57, y: height - 105, size: 12, font: regular, color: WHITE });
+    page1.drawText(cleanText(biz.name), { x: margin + 65, y: height - 90, size: 42, font: bold, color: WHITE });
+    page1.drawText(cleanText(biz.tagline), { x: margin + 67, y: height - 108, size: 13, font: regular, color: WHITE });
 
     // Business Info (Right)
-    let bizY = height - 50;
-    const bizFontSize = 9;
+    let bizY = height - 45;
+    const bizFontSize = 9.5;
     const bizTextX = width - 200;
 
-    const drawHeaderContact = (text: string, icon: string) => {
+    const drawHeaderContact = (text: string, iconType: string) => {
       if (!text) return;
-      // Icon dot
-      page1.drawCircle({ x: bizTextX - 10, y: bizY + 3, size: 2.5, color: ACCENT });
+      drawIcon(page1, iconType, bizTextX - 18, bizY + 3, 11, ACCENT);
       page1.drawText(cleanText(text), { x: bizTextX, y: bizY, size: bizFontSize, font: regular, color: WHITE });
-      bizY -= 15;
+      bizY -= 17;
     };
 
     drawHeaderContact(biz.address, "pin");
     drawHeaderContact(biz.phone, "phone");
     drawHeaderContact(biz.email, "mail");
-    if (biz.gst) drawHeaderContact(`GST: ${biz.gst}`, "file");
+    if (biz.gst) drawHeaderContact(`GST: ${biz.gst}`, "document");
 
     // Reference Badge
     const refLabel = `REF: ${data.bookingRef}`;
@@ -202,13 +247,13 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
     
     // Client Info Card
     page1.drawRectangle({ x: margin, y: y - cardH, width: cardW, height: cardH, borderColor: BORDER, borderWidth: 1, borderRadius: 8 });
-    drawSectionIcon(page1, margin + 20, y);
+    drawSectionIcon(page1, "user", margin + 20, y);
     page1.drawText("CLIENT INFORMATION", { x: margin + 40, y: y - 4, size: 10, font: bold, color: ACCENT });
     
     // Event Schedule Card
     const col2X = margin + cardW + 20;
     page1.drawRectangle({ x: col2X, y: y - cardH, width: cardW, height: cardH, borderColor: BORDER, borderWidth: 1, borderRadius: 8 });
-    drawSectionIcon(page1, col2X + 20, y);
+    drawSectionIcon(page1, "calendar", col2X + 20, y);
     page1.drawText("EVENT SCHEDULE", { x: col2X + 40, y: y - 4, size: 10, font: bold, color: ACCENT });
 
     // Populate Cards
@@ -245,7 +290,7 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
 
     // --- 4. VENUE & PRICING TABLE ---
     y -= (cardH + 40);
-    drawSectionIcon(page1, margin + 15, y);
+    drawSectionIcon(page1, "building", margin + 15, y);
     page1.drawText("VENUE & PRICING", { x: margin + 35, y: y - 4, size: 10, font: bold, color: ACCENT });
     
     y -= 25;
@@ -275,7 +320,7 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
     page1.drawText("GRAND TOTAL", { x: margin + 20, y: y + 60, size: 16, font: bold, color: TEXT_DARK });
     
     // Advance Section
-    drawSectionIcon(page1, margin + 35, y + 30, BORDER);
+    drawSectionIcon(page1, "document", margin + 35, y + 30, BORDER);
     page1.drawText("Advance Paid:", { x: margin + 60, y: y + 35, size: 10, font: regular, color: TEXT_MUTED });
     page1.drawText(`Rs. ${data.advanceAmount}`, { x: margin + 60, y: y + 18, size: 13, font: bold, color: TEXT_DARK });
 
