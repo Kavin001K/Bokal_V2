@@ -55,33 +55,38 @@ function ClassicTabLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: false,
+        tabBarHideOnKeyboard: true, // Clean layout when typing
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.background,
-          borderTopWidth: 0,
+          backgroundColor: isIOS ? "transparent" : colors.card,
+          borderTopWidth: isIOS ? 0 : StyleSheet.hairlineWidth,
           borderTopColor: colors.border,
-          elevation: 0,
-          height: isWeb ? 84 : 64,
+          elevation: 20,
+          height: isWeb ? 84 : 72, // Increased for better thumb reach
+          paddingBottom: isIOS ? 20 : 12,
           shadowColor: "#000",
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 10,
+          shadowOffset: { width: 0, height: -10 },
+          shadowOpacity: 0.1,
+          shadowRadius: 20,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "600" as const,
-          marginTop: -2,
+          fontSize: 10,
+          fontWeight: "700" as const,
+          marginTop: -4,
+          letterSpacing: 0.2,
         },
         tabBarBackground: () =>
           isIOS ? (
             <BlurView
-              intensity={80}
+              intensity={95} // Richer glass effect
               tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, { borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' }]}
             />
           ) : isWeb ? (
             <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]}
+              style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }]}
             />
           ) : null,
       }}

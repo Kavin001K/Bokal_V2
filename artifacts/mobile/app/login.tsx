@@ -1,22 +1,72 @@
+import { AnimatedButton } from "@/components/AnimatedButton";
+import { Text, TextInput } from "@/components/Typography";
 import { Feather } from "@expo/vector-icons";
 import { useLogin } from "@workspace/api-client-react";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useState } from "react";
-import {
-  ActivityIndicator,
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+  
+  
+  View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
+
+function TempleIcon({ size = 64 }: { size?: number }) {
+  // A custom temple/venue icon built from View components
+  const s = size;
+  return (
+    <View style={{ width: s, height: s, alignItems: "center", justifyContent: "center" }}>
+      {/* Dome */}
+      <View style={{
+        width: s * 0.35,
+        height: s * 0.2,
+        borderTopLeftRadius: s * 0.2,
+        borderTopRightRadius: s * 0.2,
+        backgroundColor: "rgba(255,255,255,0.95)",
+        marginBottom: -1,
+      }} />
+      {/* Kalasam (finial) */}
+      <View style={{
+        position: "absolute",
+        top: s * 0.02,
+        width: s * 0.08,
+        height: s * 0.12,
+        backgroundColor: "#FFD700",
+        borderRadius: s * 0.04,
+      }} />
+      {/* Main body */}
+      <View style={{
+        width: s * 0.55,
+        height: s * 0.3,
+        backgroundColor: "rgba(255,255,255,0.9)",
+        borderTopLeftRadius: 4,
+        borderTopRightRadius: 4,
+      }} />
+      {/* Pillars */}
+      <View style={{ flexDirection: "row", gap: s * 0.12, marginTop: -1 }}>
+        <View style={{ width: s * 0.07, height: s * 0.22, backgroundColor: "rgba(255,255,255,0.85)", borderRadius: 2 }} />
+        <View style={{ width: s * 0.07, height: s * 0.22, backgroundColor: "rgba(255,255,255,0.85)", borderRadius: 2 }} />
+        <View style={{ width: s * 0.07, height: s * 0.22, backgroundColor: "rgba(255,255,255,0.85)", borderRadius: 2 }} />
+      </View>
+      {/* Base */}
+      <View style={{
+        width: s * 0.65,
+        height: s * 0.06,
+        backgroundColor: "rgba(255,255,255,0.8)",
+        borderRadius: 2,
+        marginTop: -1,
+      }} />
+    </View>
+  );
+}
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -26,14 +76,46 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
+  // Entrance animations
+  const logoAnim = useRef(new Animated.Value(0)).current;
+  const cardAnim = useRef(new Animated.Value(0)).current;
+  const cardSlide = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(logoAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.parallel([
+        Animated.timing(cardAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.spring(cardSlide, {
+          toValue: 0,
+          tension: 60,
+          friction: 12,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, []);
+
   const loginMutation = useLogin({
     mutation: {
       onSuccess: async (data) => {
         await login(data.token, data.user);
         router.replace("/(tabs)");
       },
-      onError: (err: { data?: { message?: string } }) => {
-        setError(err?.data?.message ?? "Invalid email or password");
+      onError: (err: any) => {
+        if (err.message && err.message.includes("Failed to fetch")) {
+          setError("Network error: Unable to connect to backend server");
+        } else {
+          setError(err?.data?.message ?? "Invalid email or password");
+        }
       },
     },
   });
@@ -49,7 +131,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={["#FDF8F3", "#F5E6D8"]}
+      colors={["#FDF8F3", "#F5E6D8", "#EDD5C2"]}
       start={{ x: 0, y: 0 }}
       end={{ x: 0.3, y: 1 }}
       style={styles.container}
@@ -67,26 +149,31 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.logoArea}>
-            <View style={styles.logoCircle}>
-              <Feather name="bookmark" size={36} color="#FFFFFF" />
-            </View>
+          <Animated.View style={[styles.logoArea, { opacity: logoAnim, transform: [{ scale: logoAnim }] }]}>
+            <LinearGradient
+              colors={["#C75B2A", "#A04520"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.logoCircle}
+            >
+              <TempleIcon size={52} />
+            </LinearGradient>
             <Text style={styles.appName}>Bookal</Text>
             <Text style={styles.tagline}>Venue Booking Made Simple</Text>
             <Text style={styles.taglineTamil}>இடம் பதிவு எளிமையாக</Text>
-          </View>
+          </Animated.View>
 
-          <View style={styles.card}>
+          <Animated.View style={[styles.card, { opacity: cardAnim, transform: [{ translateY: cardSlide }] }]}>
             <Text style={styles.welcomeText}>Welcome back</Text>
             <Text style={styles.subText}>Sign in to continue</Text>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Email</Text>
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, error ? styles.inputRowError : null]}>
                 <Feather name="mail" size={16} color="#A89080" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="admin@bookal.app"
+                  placeholder="Enter your email"
                   placeholderTextColor="#A89080"
                   value={email}
                   onChangeText={(t) => { setEmail(t); setError(""); }}
@@ -100,7 +187,7 @@ export default function LoginScreen() {
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Password</Text>
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, error ? styles.inputRowError : null]}>
                 <Feather name="lock" size={16} color="#A89080" style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, styles.inputFlex]}
@@ -127,39 +214,33 @@ export default function LoginScreen() {
             </View>
 
             {error ? (
-              <View style={styles.errorBox}>
+              <Animated.View style={styles.errorBox}>
                 <Feather name="alert-circle" size={14} color="#E63946" />
                 <Text style={styles.errorText}>{error}</Text>
-              </View>
+              </Animated.View>
             ) : null}
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.loginBtn,
-                { opacity: pressed ? 0.85 : 1 },
-              ]}
-              onPress={handleLogin}
-              disabled={loginMutation.isPending}
+            <AnimatedButton
+            style={styles.loginBtn}
+            onPress={handleLogin}
+            disabled={loginMutation.isPending}
+            scaleTo={0.96}
+          >
+            <LinearGradient
+              colors={loginMutation.isPending ? ["#A89080", "#A89080"] : ["#C75B2A", "#A64920"]}
+              style={styles.loginGradient}
             >
-              <LinearGradient
-                colors={["#C75B2A", "#E07340"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.loginGradient}
-              >
-                {loginMutation.isPending ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
+              {loginMutation.isPending ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <View style={styles.loginBtnContent}>
+                  <Feather name="log-in" size={18} color="#fff" />
                   <Text style={styles.loginBtnText}>Sign In</Text>
-                )}
-              </LinearGradient>
-            </Pressable>
-
-            <View style={styles.hintBox}>
-              <Feather name="info" size={12} color="#A89080" />
-              <Text style={styles.hintText}>Default: admin@bookal.app / Admin@123</Text>
-            </View>
-          </View>
+                </View>
+              )}
+            </LinearGradient>
+          </AnimatedButton>
+          </Animated.View>
 
           <Text style={styles.version}>Bookal v1.0</Text>
         </ScrollView>
@@ -174,21 +255,20 @@ const styles = StyleSheet.create({
   scroll: { alignItems: "center", paddingHorizontal: 24 },
   logoArea: { alignItems: "center", marginBottom: 32 },
   logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: "#C75B2A",
+    width: 88,
+    height: 88,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
+    marginBottom: 16,
     shadowColor: "#C75B2A",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 10,
   },
   appName: {
-    fontSize: 36,
+    fontSize: 38,
     fontWeight: "800" as const,
     color: "#1A1209",
     letterSpacing: -0.5,
@@ -197,6 +277,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B5744",
     marginTop: 4,
+    fontWeight: "500" as const,
   },
   taglineTamil: {
     fontSize: 13,
@@ -206,26 +287,26 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 24,
+    padding: 28,
     shadowColor: "#C75B2A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 8,
   },
   welcomeText: {
-    fontSize: 22,
-    fontWeight: "700" as const,
+    fontSize: 24,
+    fontWeight: "800" as const,
     color: "#1A1209",
     marginBottom: 4,
   },
   subText: {
     fontSize: 14,
     color: "#A89080",
-    marginBottom: 24,
+    marginBottom: 28,
   },
-  fieldGroup: { marginBottom: 16 },
+  fieldGroup: { marginBottom: 18 },
   label: {
     fontSize: 13,
     fontWeight: "600" as const,
@@ -238,9 +319,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#FDF8F3",
     borderWidth: 1.5,
     borderColor: "#E8DDD4",
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    height: 52,
+    height: 54,
+  },
+  inputRowError: {
+    borderColor: "#E63946",
+    backgroundColor: "#FFF8F8",
   },
   inputIcon: { marginRight: 10 },
   input: {
@@ -255,8 +340,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     backgroundColor: "#FFE8EA",
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 16,
   },
   errorText: {
@@ -266,18 +351,23 @@ const styles = StyleSheet.create({
   },
   loginBtn: {
     marginTop: 8,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
     shadowColor: "#C75B2A",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
   },
   loginGradient: {
-    height: 54,
+    height: 56,
     alignItems: "center",
     justifyContent: "center",
+  },
+  loginBtnContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   loginBtnText: {
     fontSize: 16,
@@ -289,7 +379,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 16,
+    marginTop: 18,
     justifyContent: "center",
   },
   hintText: {
@@ -297,8 +387,9 @@ const styles = StyleSheet.create({
     color: "#A89080",
   },
   version: {
-    marginTop: 24,
+    marginTop: 28,
     fontSize: 12,
     color: "#A89080",
+    fontWeight: "500" as const,
   },
 });

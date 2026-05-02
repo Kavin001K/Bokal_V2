@@ -5,12 +5,14 @@ import { logger } from "./logger.js";
 
 export async function seedIfEmpty() {
   try {
-    const existingUsers = await db.select().from(usersTable).limit(1);
+    const existingUsers = await db.select().from(usersTable);
+    logger.info({ usersCount: existingUsers.length, users: existingUsers.map(u => u.email) }, "Current users in DB");
+    
     if (existingUsers.length > 0) return;
 
     logger.info("Seeding initial data...");
 
-    const passwordHash = await bcrypt.hash("Admin@123", 12);
+    const passwordHash = await bcrypt.hash("Bookal2026", 12);
     await db.insert(usersTable).values({
       fullName: "Admin",
       email: "admin@bookal.app",
@@ -39,7 +41,7 @@ export async function seedIfEmpty() {
       ]);
     }
 
-    logger.info("Seed complete. Admin login: admin@bookal.app / Admin@123");
+    logger.info("Seed complete. Admin login: admin@bookal.app / Bookal2026");
   } catch (err) {
     logger.error({ err }, "Seed error");
   }

@@ -1,20 +1,21 @@
+import { Text, TextInput } from "@/components/Typography";
 import { Feather } from "@expo/vector-icons";
 import { useCancelBooking, useGetBooking } from "@workspace/api-client-react";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Linking from "expo-linking";
-import React, { useState } from "react";
-import {
-  ActivityIndicator,
+import * as WebBrowser from 'expo-web-browser';
+import React, { useCallback, useState } from "react";
+import { ActivityIndicator,
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+  
+  
+  Linking,
+  View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
@@ -39,7 +40,7 @@ export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
 
@@ -58,6 +59,12 @@ export default function BookingDetailScreen() {
     },
   });
 
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const onRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
   if (isLoading || !booking) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
@@ -69,10 +76,37 @@ export default function BookingDetailScreen() {
   const statusColor = getStatusColor(booking.status, booking.bookingDate, colors);
   const isFuture = booking.bookingDate >= new Date().toISOString().split("T")[0]!;
   const canCancel = booking.status === "confirmed" && isFuture;
+  const canEdit = booking.status === "confirmed" && isFuture;
 
-  const handleWhatsApp = () => {
-    const phone = booking.phoneNumbers?.[0]?.replace(/\D/g, "");
-    if (!phone) return;
+  const handleDownloadPdf = async () => {
+    try {
+      setDownloadingPdf(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const domain = process.env["EXPO_PUBLIC_DOMAIN"] || "localhost:3000";
+      const isLocal = domain.includes("localhost") || domain.includes("192.168.") || domain.includes("10.0.");
+      const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
+      
+      // Append token to bypass Authorization header requirement in external browser
+      const pdfUrl = `${baseUrl}/api/bookings/${booking.id}/pdf?token=${token}`;
+      
+      await WebBrowser.openBrowserAsync(pdfUrl, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+        controlsColor: colors.primary,
+        toolbarColor: colors.background,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.error("PDF Download Error:", err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleWhatsApp = (phone: string) => {
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (!cleanPhone) return;
     const venueName = booking.venues?.map((v) => v.venueName).join(", ") ?? "";
     const msg = `*Booking Confirmation - Bookal*
 Booking Ref: ${booking.bookingRef}
@@ -82,7 +116,7 @@ Time: ${formatTime(booking.startTime)} - ${formatTime(booking.endTime)}
 Venue: ${venueName}
 Amount: ₹${Number(booking.totalAmount).toLocaleString("en-IN")}
 Thank you for choosing us!`;
-    Linking.openURL(`https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`);
+    Linking.openURL(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`);
   };
 
   const handleCall = (phone: string) => {
@@ -107,13 +141,18 @@ Thank you for choosing us!`;
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
           {booking.bookingRef}
         </Text>
-        <View style={{ width: 22 }} />
+        <Pressable onPress={handleDownloadPdf} hitSlop={8}>
+          <Feather name="share-2" size={22} color={colors.primary} />
+        </Pressable>
       </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 120 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
       >
         <View style={[styles.refCard, { backgroundColor: colors.primary }]}>
           <Text style={styles.refText}>{booking.bookingRef}</Text>
@@ -127,13 +166,23 @@ Thank you for choosing us!`;
           <SectionTitle title="Customer Details" icon="user" colors={colors} />
           <Text style={[styles.customerName, { color: colors.textPrimary }]}>{booking.customerName}</Text>
           {booking.phoneNumbers?.map((phone, idx) => (
-            <Pressable key={idx} style={styles.phoneRow} onPress={() => handleCall(phone)}>
-              <Feather name="phone" size={14} color={colors.primary} />
-              <Text style={[styles.phoneText, { color: colors.primary }]}>
-                +91 {phone.replace(/(\d{5})(\d{5})/, "$1 $2")}
-              </Text>
-              <Feather name="external-link" size={12} color={colors.primary} />
-            </Pressable>
+            <View key={idx} style={styles.phoneActionRow}>
+              <Pressable style={[styles.phoneRow, { flex: 1 }]} onPress={() => handleCall(phone)}>
+                <Feather name="phone" size={14} color={colors.primary} />
+                <Text style={[styles.phoneText, { color: colors.primary }]}>
+                  +91 {phone.replace(/(\d{5})(\d{5})/, "$1 $2")}
+                </Text>
+              </Pressable>
+              <Pressable 
+                style={[styles.waCircle, { backgroundColor: "#25D36620" }]} 
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  Linking.openURL(`https://wa.me/91${phone.replace(/\D/g, "")}`);
+                }}
+              >
+                <Feather name="message-circle" size={16} color="#25D366" />
+              </Pressable>
+            </View>
           ))}
           {booking.address ? (
             <DetailRow icon="map-pin" label="Address" value={booking.address} colors={colors} />
@@ -205,9 +254,24 @@ Thank you for choosing us!`;
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background, borderTopColor: colors.border }]}>
-        <Pressable style={[styles.whatsappBtn, { backgroundColor: "#25D366" }]} onPress={handleWhatsApp}>
-          <Feather name="message-circle" size={18} color="#fff" />
-          <Text style={styles.whatsappBtnText}>WhatsApp</Text>
+        <Pressable 
+          style={[styles.callBtn, { backgroundColor: colors.primary }]} 
+          onPress={() => handleCall(booking.phoneNumbers?.[0] || "")}
+        >
+          <Feather name="phone" size={18} color="#fff" />
+          <Text style={styles.callBtnText}>Call Customer</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.pdfBtn, { backgroundColor: colors.card, borderColor: colors.primary }]}
+          onPress={handleDownloadPdf}
+          disabled={downloadingPdf}
+        >
+          {downloadingPdf ? (
+            <ActivityIndicator color={colors.primary} size="small" />
+          ) : (
+            <Feather name="download" size={18} color={colors.primary} />
+          )}
+          <Text style={[styles.pdfBtnText, { color: colors.primary }]}>PDF</Text>
         </Pressable>
         {canCancel && (
           <Pressable
@@ -215,7 +279,6 @@ Thank you for choosing us!`;
             onPress={() => setShowCancelModal(true)}
           >
             <Feather name="x-circle" size={18} color={colors.destructive} />
-            <Text style={[styles.cancelBtnText, { color: colors.destructive }]}>Cancel</Text>
           </Pressable>
         )}
       </View>
@@ -299,9 +362,11 @@ const styles = StyleSheet.create({
   section: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 },
   sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
   sectionTitleText: { fontSize: 11, fontWeight: "700" as const, textTransform: "uppercase", letterSpacing: 0.8 },
-  customerName: { fontSize: 20, fontWeight: "800" as const, marginBottom: 10 },
-  phoneRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8, padding: 10, borderRadius: 10 },
-  phoneText: { fontSize: 15, fontWeight: "600" as const, flex: 1 },
+  customerName: { fontSize: 20, fontWeight: "800" as const, marginBottom: 12 },
+  phoneActionRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  phoneRow: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.02)" },
+  phoneText: { fontSize: 15, fontWeight: "700" as const },
+  waCircle: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   detailRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   detailLabel: { fontSize: 13, width: 80 },
   detailValue: { fontSize: 13, flex: 1 },
@@ -316,9 +381,11 @@ const styles = StyleSheet.create({
   cancelNote: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, padding: 10, borderRadius: 10 },
   cancelNoteText: { fontSize: 12, flex: 1 },
   footer: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
-  whatsappBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 50, borderRadius: 12 },
-  whatsappBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" as const },
-  cancelBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 50, borderRadius: 12, borderWidth: 1.5 },
+  callBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 50, borderRadius: 12 },
+  callBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" as const },
+  pdfBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 50, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1.5 },
+  pdfBtnText: { fontSize: 14, fontWeight: "700" as const },
+  cancelBtn: { width: 50, height: 50, borderRadius: 12, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   cancelBtnText: { fontSize: 14, fontWeight: "700" as const },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   cancelModal: { margin: 16, borderRadius: 20, padding: 24 },

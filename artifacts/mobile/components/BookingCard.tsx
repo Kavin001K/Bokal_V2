@@ -1,12 +1,11 @@
+import { Text, TextInput } from "@/components/Typography";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React from "react";
-import {
-  Pressable,
+import { Pressable,
   StyleSheet,
-  Text,
-  View,
-} from "react-native";
+  
+  View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -55,7 +54,7 @@ function formatAmount(amount: number): string {
   }).format(amount);
 }
 
-export default function BookingCard({ booking, onPress }: BookingCardProps) {
+export default React.memo(function BookingCard({ booking, onPress }: BookingCardProps) {
   const colors = useColors();
   const scale = useSharedValue(1);
 
@@ -157,7 +156,7 @@ export default function BookingCard({ booking, onPress }: BookingCardProps) {
       </Pressable>
     </Animated.View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

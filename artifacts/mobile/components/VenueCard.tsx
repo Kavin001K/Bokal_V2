@@ -1,12 +1,11 @@
+import { Text, TextInput } from "@/components/Typography";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React from "react";
-import {
-  Pressable,
+import { Pressable,
   StyleSheet,
-  Text,
-  View,
-} from "react-native";
+  
+  View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -52,9 +51,20 @@ export default function VenueCard({
 }: VenueCardProps) {
   const colors = useColors();
   const scale = useSharedValue(1);
+  const [isEditingPrice, setIsEditingPrice] = React.useState(false);
+  const [priceText, setPriceText] = React.useState(
+    String(customPrice ?? Number(venue.pricePerHour))
+  );
 
   const effectivePrice = customPrice ?? Number(venue.pricePerHour);
   const subtotal = effectivePrice * durationHours;
+
+  // Sync priceText when customPrice or venue changes
+  React.useEffect(() => {
+    if (!isEditingPrice) {
+      setPriceText(String(customPrice ?? Number(venue.pricePerHour)));
+    }
+  }, [customPrice, venue.pricePerHour, isEditingPrice]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -64,6 +74,17 @@ export default function VenueCard({
     if (isDisabled) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onToggle();
+  };
+
+  const handlePriceSubmit = () => {
+    const parsed = parseInt(priceText, 10);
+    if (!isNaN(parsed) && parsed >= 0) {
+      onPriceChange(parsed);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } else {
+      setPriceText(String(effectivePrice));
+    }
+    setIsEditingPrice(false);
   };
 
   const icon = venue.type === "mahal" ? "home" : "wind";
@@ -143,9 +164,41 @@ export default function VenueCard({
           {venue.name}
         </Text>
 
-        <Text style={[styles.price, { color: colors.textSecondary }]}>
-          ₹{Number(venue.pricePerHour).toLocaleString("en-IN")}/hr
-        </Text>
+        {isSelected ? (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              setIsEditingPrice(true);
+            }}
+            style={[styles.priceEditRow, { backgroundColor: colors.primary + "10", borderColor: colors.primary + "30" }]}
+          >
+            <Feather name="edit-3" size={10} color={colors.primary} style={{ marginRight: 4 }} />
+            {isEditingPrice ? (
+              <View style={styles.priceInputRow}>
+                <Text style={[styles.priceSymbol, { color: colors.primary }]}>₹</Text>
+                <TextInput
+                  style={[styles.priceInput, { color: colors.primary, borderBottomColor: colors.primary }]}
+                  value={priceText}
+                  onChangeText={setPriceText}
+                  keyboardType="number-pad"
+                  autoFocus
+                  selectTextOnFocus
+                  onBlur={handlePriceSubmit}
+                  onSubmitEditing={handlePriceSubmit}
+                />
+                <Text style={[styles.priceUnit, { color: colors.textMuted }]}>/hr</Text>
+              </View>
+            ) : (
+              <Text style={[styles.priceEditable, { color: colors.primary }]}>
+                ₹{effectivePrice.toLocaleString("en-IN")}/hr
+              </Text>
+            )}
+          </Pressable>
+        ) : (
+          <Text style={[styles.price, { color: colors.textSecondary }]}>
+            ₹{Number(venue.pricePerHour).toLocaleString("en-IN")}/hr
+          </Text>
+        )}
 
         {isDisabled && conflictInfo ? (
           <Text style={[styles.conflictText, { color: colors.destructive }]} numberOfLines={2}>
@@ -240,5 +293,39 @@ const styles = StyleSheet.create({
   subtotal: {
     fontSize: 13,
     fontWeight: "700" as const,
+  },
+  priceEditRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  priceEditable: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+  },
+  priceInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  priceSymbol: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+  },
+  priceInput: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    borderBottomWidth: 1.5,
+    paddingVertical: 0,
+    paddingHorizontal: 2,
+    minWidth: 50,
+  },
+  priceUnit: {
+    fontSize: 11,
+    marginLeft: 2,
   },
 });

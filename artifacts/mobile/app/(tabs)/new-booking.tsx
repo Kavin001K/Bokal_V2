@@ -1,3 +1,5 @@
+import { AnimatedButton } from "@/components/AnimatedButton";
+import { Text, TextInput } from "@/components/Typography";
 import { Feather } from "@expo/vector-icons";
 import {
   useCheckAvailability,
@@ -8,8 +10,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useCallback, useState } from "react";
-import {
-  ActivityIndicator,
+import { ActivityIndicator,
   Alert,
   FlatList,
   KeyboardAvoidingView,
@@ -17,10 +18,9 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import StepIndicator from "@/components/StepIndicator";
 import VenueCard from "@/components/VenueCard";
@@ -106,6 +106,53 @@ export default function NewBookingScreen() {
     { q: searchQuery },
     { query: { enabled: searchQuery.length >= 2 } }
   );
+
+  const getBaseUrl = () => {
+    const domain = process.env["EXPO_PUBLIC_DOMAIN"];
+    const isLocal = domain?.includes("localhost") || domain?.includes("192.168.") || domain?.includes("10.0.");
+    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "http://localhost:3000";
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!createdBooking) return;
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const pdfUrl = `${getBaseUrl()}/api/bookings/${createdBooking.bookingRef}/pdf`;
+      
+      await WebBrowser.openBrowserAsync(pdfUrl, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+        controlsColor: colors.primary,
+        toolbarColor: colors.background,
+      });
+    } catch (err) {
+      Alert.alert("Error", "Could not open the receipt PDF.");
+    }
+  };
+
+  // Focus Management Refs
+  const nameRef = React.useRef<any>(null);
+  const addressRef = React.useRef<any>(null);
+  const phoneRefs = React.useRef<any[]>([]);
+
+  // Add a new phone number and focus it
+  const handleAddPhone = () => {
+    const newIdx = form.phoneNumbers.length;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    updateField("phoneNumbers", [...form.phoneNumbers, ""]);
+    
+    // Slight delay to allow the new input to render
+    setTimeout(() => {
+      phoneRefs.current[newIdx]?.focus();
+    }, 100);
+  };
+
+  const focusNext = (currentIdx: number) => {
+    if (currentIdx < form.phoneNumbers.length - 1) {
+      phoneRefs.current[currentIdx + 1]?.focus();
+    } else {
+      addressRef.current?.focus();
+    }
+  };
 
   const createMutation = useCreateBooking({
     mutation: {
@@ -214,16 +261,26 @@ export default function NewBookingScreen() {
             ₹{createdBooking.totalAmount.toLocaleString("en-IN")}
           </Text>
           <View style={styles.successBtns}>
-            <Pressable style={[styles.successBtn, { backgroundColor: colors.secondary }]} onPress={resetForm}>
+            <AnimatedButton style={[styles.successBtn, { backgroundColor: colors.secondary }]} onPress={resetForm} scaleTo={0.96}>
               <Text style={[styles.successBtnText, { color: colors.textPrimary }]}>New Booking</Text>
-            </Pressable>
-            <Pressable
+            </AnimatedButton>
+            <AnimatedButton
               style={[styles.successBtn, { backgroundColor: colors.primary }]}
               onPress={() => { resetForm(); router.push("/(tabs)"); }}
+              scaleTo={0.96}
             >
               <Text style={[styles.successBtnText, { color: "#fff" }]}>Go Home</Text>
-            </Pressable>
+            </AnimatedButton>
           </View>
+
+          <AnimatedButton 
+            style={[styles.downloadPdfBtn, { borderColor: colors.primary }]} 
+            onPress={handleDownloadPdf}
+            scaleTo={0.98}
+          >
+            <Feather name="file-text" size={18} color={colors.primary} />
+            <Text style={[styles.downloadPdfText, { color: colors.primary }]}>View/Download Receipt PDF</Text>
+          </AnimatedButton>
         </View>
       </View>
     );
@@ -294,11 +351,16 @@ export default function NewBookingScreen() {
 
             <FormField label="Customer Name *">
               <TextInput
+                ref={nameRef}
                 style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.textPrimary }]}
-                placeholder="Full name"
+                placeholder="Enter customer name..."
                 placeholderTextColor={colors.textMuted}
                 value={form.customerName}
                 onChangeText={(t) => updateField("customerName", t)}
+                autoFocus={true}
+                returnKeyType="next"
+                onSubmitEditing={() => phoneRefs.current[0]?.focus()}
+                blurOnSubmit={false}
               />
             </FormField>
 
@@ -309,6 +371,7 @@ export default function NewBookingScreen() {
                     <Text style={[styles.phonePrefixText, { color: colors.textSecondary }]}>+91</Text>
                   </View>
                   <TextInput
+                    ref={(el) => (phoneRefs.current[idx] = el)}
                     style={[styles.phoneInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.textPrimary }]}
                     placeholder="98765 43210"
                     placeholderTextColor={colors.textMuted}
@@ -320,6 +383,9 @@ export default function NewBookingScreen() {
                     }}
                     keyboardType="number-pad"
                     maxLength={10}
+                    returnKeyType={idx === form.phoneNumbers.length - 1 ? "done" : "next"}
+                    onSubmitEditing={() => focusNext(idx)}
+                    blurOnSubmit={idx === form.phoneNumbers.length - 1}
                   />
                   {idx > 0 && (
                     <Pressable
@@ -333,18 +399,20 @@ export default function NewBookingScreen() {
                 </View>
               ))}
               {form.phoneNumbers.length < 5 && (
-                <Pressable
+                <AnimatedButton
                   style={[styles.addPhoneBtn, { borderColor: colors.primary }]}
-                  onPress={() => updateField("phoneNumbers", [...form.phoneNumbers, ""])}
+                  onPress={handleAddPhone}
+                  scaleTo={0.97}
                 >
                   <Feather name="plus" size={14} color={colors.primary} />
                   <Text style={[styles.addPhoneText, { color: colors.primary }]}>Add phone</Text>
-                </Pressable>
+                </AnimatedButton>
               )}
             </FormField>
 
             <FormField label="Address (optional)">
               <TextInput
+                ref={addressRef}
                 style={[styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.textPrimary }]}
                 placeholder="Customer address..."
                 placeholderTextColor={colors.textMuted}
@@ -624,36 +692,65 @@ export default function NewBookingScreen() {
         style={[
           styles.footer,
           {
-            paddingBottom: insets.bottom + 16,
+            paddingBottom: insets.bottom + 80, // Increased to clear the tab bar
             backgroundColor: colors.background,
             borderTopColor: colors.border,
           },
         ]}
       >
-        {step < 3 ? (
-          <Pressable
-            style={[styles.nextBtn, { backgroundColor: colors.primary }]}
-            onPress={handleNext}
-          >
-            <Text style={styles.nextBtnText}>Continue</Text>
-            <Feather name="arrow-right" size={18} color="#fff" />
-          </Pressable>
-        ) : (
-          <Pressable
-            style={[styles.nextBtn, { backgroundColor: colors.primary }]}
-            onPress={handleSubmit}
-            disabled={createMutation.isPending}
-          >
-            {createMutation.isPending ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Feather name="check" size={18} color="#fff" />
-                <Text style={styles.nextBtnText}>Create Booking</Text>
-              </>
-            )}
-          </Pressable>
-        )}
+        <View style={styles.footerBtns}>
+          {step > 0 && step < 3 && (
+            <AnimatedButton
+              style={[styles.backBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStep((s) => s - 1); }}
+            >
+              <Feather name="arrow-left" size={18} color={colors.textSecondary} />
+              <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>Back</Text>
+            </AnimatedButton>
+          )}
+          {step === 3 && (
+            <AnimatedButton
+              style={[styles.backBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+              onPress={() => setStep(0)}
+            >
+              <Feather name="edit-2" size={16} color={colors.textSecondary} />
+              <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>Edit</Text>
+            </AnimatedButton>
+          )}
+          {step < 3 ? (
+            <AnimatedButton
+              style={[
+                styles.nextBtn,
+                { backgroundColor: canProceed() ? colors.primary : colors.textMuted, flex: 1 },
+              ]}
+              onPress={handleNext}
+              disabled={!canProceed()}
+            >
+              <Text style={styles.nextBtnText}>
+                {step === 2 ? "Review Booking" : "Continue"}
+              </Text>
+              <Feather name="arrow-right" size={18} color="#fff" />
+            </AnimatedButton>
+          ) : (
+            <AnimatedButton
+              style={[
+                styles.nextBtn,
+                { backgroundColor: colors.primary, flex: 1 },
+              ]}
+              onPress={handleSubmit}
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Feather name="check-circle" size={18} color="#fff" />
+                  <Text style={styles.nextBtnText}>Create Booking</Text>
+                </>
+              )}
+            </AnimatedButton>
+          )}
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -938,7 +1035,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    elevation: 10,
   },
+  footerBtns: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 54,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  backBtnText: { fontSize: 14, fontWeight: "600" as const },
   nextBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -946,6 +1065,7 @@ const styles = StyleSheet.create({
     gap: 8,
     height: 54,
     borderRadius: 14,
+    flex: 1,
     shadowColor: "#C75B2A",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -973,4 +1093,20 @@ const styles = StyleSheet.create({
   successBtns: { flexDirection: "row", gap: 12, width: "100%" },
   successBtn: { flex: 1, height: 48, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   successBtnText: { fontSize: 14, fontWeight: "700" as const },
+  downloadPdfBtn: {
+    marginTop: 24,
+    width: "100%",
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    borderStyle: "dashed",
+  },
+  downloadPdfText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
 });

@@ -1,14 +1,15 @@
 import { Router } from "express";
 import { eq, and, gte, lte, or, ilike, desc, sql, ne } from "drizzle-orm";
-import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable } from "@workspace/db";
+import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable, auditLogsTable, bookingPdfsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
+import { generatePremiumBookingPdf } from "../lib/pdf-generator.js";
 
 const router = Router();
 
 function calcDuration(startTime: string, endTime: string): number {
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
-  return (eh * 60 + em - sh * 60 - sm) / 60;
+  return (eh! * 60 + em! - sh! * 60 - sm!) / 60;
 }
 
 async function generateBookingRef(): Promise<string> {
@@ -25,6 +26,20 @@ async function generateBookingRef(): Promise<string> {
     ? parseInt(lastBooking[0].bookingRef.split("-")[2] ?? "0")
     : 0;
   return `${prefix}${String(lastNum + 1).padStart(4, "0")}`;
+}
+
+async function logAudit(userId: string, action: string, entityType?: string, entityId?: string, details?: unknown) {
+  try {
+    await db.insert(auditLogsTable).values({
+      userId,
+      action,
+      entityType: entityType ?? null,
+      entityId: entityId ?? null,
+      details: details ? JSON.stringify(details) : null,
+    });
+  } catch {
+    // Audit logging should never break the main flow
+  }
 }
 
 async function formatBooking(b: typeof bookingsTable.$inferSelect, venues: Array<{
@@ -280,12 +295,13 @@ router.post("/bookings", requireAuth, async (req, res) => {
   const bookingRef = await generateBookingRef();
   const totalAmount = venues.reduce((sum, v) => sum + v.pricePerHour * durationHours, 0);
 
+  // Store phoneNumbers directly as array — JSONB column handles serialization
   const [newBooking] = await db
     .insert(bookingsTable)
     .values({
       bookingRef,
       customerName,
-      phoneNumbers: JSON.stringify(phoneNumbers),
+      phoneNumbers,
       address: address ?? null,
       idProofUrl: idProofUrl ?? null,
       bookingDate,
@@ -308,6 +324,13 @@ router.post("/bookings", requireAuth, async (req, res) => {
       subtotal: String(v.pricePerHour * durationHours),
     }))
   );
+
+  // Audit log
+  await logAudit(req.user!.userId, "create_booking", "booking", newBooking!.id, {
+    bookingRef,
+    customerName,
+    totalAmount,
+  });
 
   const [venueRows, createdByRows] = await Promise.all([
     db
@@ -350,7 +373,7 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
     .update(bookingsTable)
     .set({
       customerName,
-      phoneNumbers: JSON.stringify(phoneNumbers),
+      phoneNumbers,
       address: address ?? null,
       idProofUrl: idProofUrl ?? null,
       bookingDate,
@@ -374,6 +397,12 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
     }))
   );
 
+  // Audit log
+  await logAudit(req.user!.userId, "update_booking", "booking", id!, {
+    customerName,
+    totalAmount,
+  });
+
   const updated = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
   const [venueRows, createdByRows] = await Promise.all([
     db
@@ -396,12 +425,94 @@ router.delete("/bookings/:id", requireAuth, async (req, res) => {
     .set({
       status: "cancelled",
       cancelledAt: new Date(),
+      cancelledById: req.user!.userId,
       cancelReason: reason,
       updatedAt: new Date(),
     })
     .where(eq(bookingsTable.id, id!));
 
+  // Audit log
+  await logAudit(req.user!.userId, "cancel_booking", "booking", id!, { reason });
+
   res.json({ success: true, message: "Booking cancelled" });
+});
+
+import { uploadBookingPdf } from "../lib/storage.js";
+
+// PDF generation endpoint — generates a professional 2-page PDF receipt
+// Supports token in query for direct browser downloads
+router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  // Fetch booking data (try by UUID or by BookingRef)
+  let booking = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+  if (!booking[0]) {
+    booking = await db.select().from(bookingsTable).where(eq(bookingsTable.bookingRef, id!)).limit(1);
+  }
+  
+  if (!booking[0]) {
+    res.status(404).json({ error: "Booking not found" });
+    return;
+  }
+  const b = booking[0];
+
+  // Fetch business settings for branding
+  const settingsRows = await db.select().from(settingsTable);
+  const settings: Record<string, string> = {};
+  settingsRows.forEach(s => settings[s.key] = s.value);
+
+  const venueRows = await db
+    .select({ venueName: venuesTable.name, pricePerHour: bookingVenuesTable.pricePerHour, subtotal: bookingVenuesTable.subtotal })
+    .from(bookingVenuesTable)
+    .innerJoin(venuesTable, eq(bookingVenuesTable.venueId, venuesTable.id))
+    .where(eq(bookingVenuesTable.bookingId, id!));
+
+  const createdBy = await db.select().from(usersTable).where(eq(usersTable.id, b.createdById)).limit(1);
+
+  const venueList = venueRows.map((v) => ({
+    name: v.venueName,
+    price: Number(v.subtotal).toLocaleString('en-IN')
+  }));
+
+  const pdfBuffer = generatePremiumBookingPdf({
+    bookingRef: b.bookingRef,
+    customerName: b.customerName,
+    phones: (b.phoneNumbers as string[]).join(", "),
+    address: b.address ?? "N/A",
+    bookingDate: new Date(b.bookingDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }),
+    tamilDate: b.tamilDateLabel ?? "",
+    startTime: b.startTime,
+    endTime: b.endTime,
+    duration: String(b.durationHours),
+    venues: venueList,
+    totalAmount: Number(b.totalAmount).toLocaleString('en-IN'),
+    notes: b.notes ?? "",
+    createdBy: createdBy[0]?.fullName ?? "Unknown",
+    createdAt: b.createdAt.toISOString(),
+    business: {
+      name: settings.biz_name || "MahalBook Venue",
+      tagline: settings.biz_tagline || "Excellence in Event Hosting",
+      address: settings.biz_address || "123 Main Street, Tamil Nadu",
+      phone: settings.biz_phone || "+91 98765 43210",
+      email: settings.biz_email || "contact@mahalbook.app",
+      gst: settings.biz_gst || "33AAAAA0000A1Z5"
+    }
+  });
+
+  const fileName = `Receipt_${b.bookingRef}_${b.customerName.replace(/\s+/g, '_')}.pdf`;
+
+  // Upload to Supabase Storage for CDN speed
+  const publicUrl = await uploadBookingPdf(fileName, pdfBuffer);
+
+  if (publicUrl) {
+    // Redirect to Supabase for instant download
+    return res.redirect(publicUrl);
+  }
+
+  // Fallback to direct stream if upload fails
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  res.send(Buffer.from(pdfBuffer));
 });
 
 export default router;

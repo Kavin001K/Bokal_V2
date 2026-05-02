@@ -13,4 +13,12 @@ if (!process.env.DATABASE_URL) {
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
+// Auto-migrate newly added columns for user profiles
+pool.query(`
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number text;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth text;
+`).catch((err) => {
+  console.error("Failed to run auto-migrations:", err);
+});
+
 export * from "./schema";

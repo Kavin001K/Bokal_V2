@@ -10,12 +10,19 @@ declare global {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  let token = "";
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
+  
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else if (req.query.token) {
+    token = req.query.token as string;
+  }
+
+  if (!token) {
     res.status(401).json({ error: "Unauthorized", message: "No token provided" });
     return;
   }
-  const token = authHeader.slice(7);
   try {
     req.user = verifyToken(token);
     next();

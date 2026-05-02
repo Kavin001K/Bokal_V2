@@ -96,4 +96,57 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
   res.json({ success: true, message: "Password changed successfully" });
 });
 
+router.get("/auth/profile", requireAuth, async (req, res) => {
+  const user = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user!.userId))
+    .limit(1);
+
+  if (!user[0]) {
+    res.status(404).json({ error: "Not Found", message: "User not found" });
+    return;
+  }
+
+  res.json({
+    id: user[0].id,
+    fullName: user[0].fullName,
+    email: user[0].email,
+    phoneNumber: user[0].phoneNumber,
+    dateOfBirth: user[0].dateOfBirth,
+    role: user[0].role,
+  });
+});
+
+router.put("/auth/profile", requireAuth, async (req, res) => {
+  const { fullName, phoneNumber, dateOfBirth } = req.body as {
+    fullName?: string;
+    phoneNumber?: string;
+    dateOfBirth?: string;
+  };
+
+  const updateData: any = {};
+  if (fullName !== undefined) updateData.fullName = fullName;
+  if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+  if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
+
+  if (Object.keys(updateData).length === 0) {
+    res.status(400).json({ error: "Bad Request", message: "No data to update" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(usersTable)
+    .set(updateData)
+    .where(eq(usersTable.id, req.user!.userId))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Not Found", message: "User not found" });
+    return;
+  }
+
+  res.json({ success: true, user: updated });
+});
+
 export default router;

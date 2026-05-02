@@ -1,19 +1,19 @@
+import { AnimatedButton } from "@/components/AnimatedButton";
+import { Text, TextInput } from "@/components/Typography";
 import { Feather } from "@expo/vector-icons";
 import { useChangePassword } from "@workspace/api-client-react";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import {
-  ActivityIndicator,
+import { ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+  
+  
+  View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
@@ -127,7 +127,7 @@ export default function ChangePasswordScreen() {
           </View>
         ) : null}
 
-        <Pressable
+        <AnimatedButton
           style={[styles.btn, { backgroundColor: colors.primary }]}
           onPress={handleSubmit}
           disabled={mutation.isPending}
@@ -137,7 +137,7 @@ export default function ChangePasswordScreen() {
           ) : (
             <Text style={styles.btnText}>Update Password</Text>
           )}
-        </Pressable>
+        </AnimatedButton>
       </ScrollView>
     </KeyboardAvoidingView>
   );

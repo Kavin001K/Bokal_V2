@@ -1,15 +1,16 @@
+import { AnimatedButton } from "@/components/AnimatedButton";
+import { Text, TextInput } from "@/components/Typography";
 import { Feather } from "@expo/vector-icons";
-import { useGetBookings, useGetReportSummary } from "@workspace/api-client-react";
+import { useGetBookings, useGetReportSummary, useExportReport } from "@workspace/api-client-react";
+import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import {
-  ActivityIndicator,
+import { ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  View,
-} from "react-native";
+  
+  View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BookingCard from "@/components/BookingCard";
 import { useColors } from "@/hooks/useColors";
@@ -80,7 +81,7 @@ export default function ReportsScreen() {
       >
         <View style={styles.presetRow}>
           {PRESETS.map((p) => (
-            <Pressable
+            <AnimatedButton
               key={p.key}
               style={[
                 styles.presetBtn,
@@ -90,6 +91,7 @@ export default function ReportsScreen() {
                 },
               ]}
               onPress={() => setPreset(p.key)}
+              scaleTo={0.96}
             >
               <Text
                 style={[
@@ -99,12 +101,12 @@ export default function ReportsScreen() {
               >
                 {p.label}
               </Text>
-            </Pressable>
+            </AnimatedButton>
           ))}
         </View>
 
         <Text style={[styles.dateRange, { color: colors.textMuted }]}>
-          {from} → {to}
+          {new Date(from + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })} → {new Date(to + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
         </Text>
 
         {summaryLoading ? (
@@ -133,17 +135,26 @@ export default function ReportsScreen() {
             {summary.byVenue.length > 0 && (
               <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Venue Performance</Text>
-                {summary.byVenue.map((v) => (
-                  <View key={v.venueId} style={styles.venueRow}>
-                    <Text style={[styles.venueName, { color: colors.textPrimary }]}>{v.venueName}</Text>
-                    <View style={styles.venueStats}>
-                      <Text style={[styles.venueCount, { color: colors.textSecondary }]}>{v.bookingCount} bookings</Text>
-                      <Text style={[styles.venueRevenue, { color: colors.primary }]}>
-                        ₹{Number(v.revenue).toLocaleString("en-IN")}
-                      </Text>
+                {summary.byVenue.map((v) => {
+                  const maxRevenue = Math.max(...summary.byVenue.map((x) => Number(x.revenue)));
+                  const barWidth = maxRevenue > 0 ? (Number(v.revenue) / maxRevenue) * 100 : 0;
+                  return (
+                    <View key={v.venueId} style={styles.venueRow}>
+                      <View style={styles.venueInfo}>
+                        <Text style={[styles.venueName, { color: colors.textPrimary }]}>{v.venueName}</Text>
+                        <View style={styles.venueStats}>
+                          <Text style={[styles.venueCount, { color: colors.textSecondary }]}>{v.bookingCount} bookings</Text>
+                          <Text style={[styles.venueRevenue, { color: colors.primary }]}>
+                            ₹{Number(v.revenue).toLocaleString("en-IN")}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={[styles.barTrack, { backgroundColor: colors.secondary }]}>
+                        <View style={[styles.barFill, { width: `${barWidth}%`, backgroundColor: colors.primary }]} />
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             )}
 
@@ -259,11 +270,14 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 14, fontWeight: "700" as const, marginBottom: 12 },
   sectionTitle2: { fontSize: 12, fontWeight: "700" as const, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 },
-  venueRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  venueRow: { marginBottom: 14 },
+  venueInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   venueName: { fontSize: 14, flex: 1 },
   venueStats: { alignItems: "flex-end" },
   venueCount: { fontSize: 11 },
   venueRevenue: { fontSize: 13, fontWeight: "700" as const },
+  barTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
+  barFill: { height: "100%", borderRadius: 4, minWidth: 4 },
   bookingListSection: { marginTop: 8 },
   noAccessTitle: { fontSize: 18, fontWeight: "700" as const },
   noAccessText: { fontSize: 14, textAlign: "center" },

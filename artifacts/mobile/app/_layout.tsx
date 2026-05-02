@@ -8,6 +8,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as Updates from "expo-updates";
 import React, { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -92,6 +93,26 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  useEffect(() => {
+    async function onFetchUpdateAsync() {
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          // Optionally alert the user or just restart
+          // await Updates.reloadAsync();
+        }
+      } catch (e) {
+        // Handle error or ignore for now
+        console.log("Update check failed:", e);
+      }
+    }
+
+    if (!__DEV__) {
+      onFetchUpdateAsync();
+    }
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {

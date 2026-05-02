@@ -16,6 +16,8 @@ export interface AuthUser {
   email: string;
   role: string;
   mustChangePw: boolean;
+  phoneNumber?: string;
+  dateOfBirth?: string;
 }
 
 interface AuthState {
@@ -39,7 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const domain = process.env["EXPO_PUBLIC_DOMAIN"];
     if (domain) {
-      setBaseUrl(`https://${domain}`);
+      const isLocal = domain.includes("localhost") || domain.includes("192.168.") || domain.includes("10.0.");
+      setBaseUrl(`${isLocal ? "http" : "https"}://${domain}`);
     }
   }, []);
 

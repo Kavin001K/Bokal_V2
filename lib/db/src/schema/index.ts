@@ -19,6 +19,8 @@ export const usersTable = pgTable("users", {
   role: text("role").notNull().default("employee"),
   isActive: boolean("is_active").notNull().default(true),
   mustChangePw: boolean("must_change_pw").notNull().default(false),
+  phoneNumber: text("phone_number"),
+  dateOfBirth: text("date_of_birth"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   lastLogin: timestamp("last_login"),
 });
@@ -68,6 +70,7 @@ export const bookingsTable = pgTable("bookings", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   cancelledAt: timestamp("cancelled_at"),
+  cancelledById: uuid("cancelled_by_id").references(() => usersTable.id),
   cancelReason: text("cancel_reason"),
 });
 
@@ -103,3 +106,40 @@ export const settingsTable = pgTable("settings", {
 });
 
 export type Setting = typeof settingsTable.$inferSelect;
+
+export const auditLogsTable = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => usersTable.id),
+  action: text("action").notNull(),
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  details: jsonb("details"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogsTable).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogsTable.$inferSelect;
+
+export const bookingPdfsTable = pgTable("booking_pdfs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bookingId: uuid("booking_id")
+    .notNull()
+    .references(() => bookingsTable.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  pdfData: text("pdf_data").notNull(),
+  fileSize: integer("file_size").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertBookingPdfSchema = createInsertSchema(bookingPdfsTable).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertBookingPdf = z.infer<typeof insertBookingPdfSchema>;
+export type BookingPdf = typeof bookingPdfsTable.$inferSelect;
