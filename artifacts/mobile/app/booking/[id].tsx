@@ -310,6 +310,11 @@ Thank you for choosing us!`;
           <Text style={[styles.pdfBtnText, { color: colors.primary }]}>PDF</Text>
         </Pressable>
         {canCancel && (
+          <Pressable
+            style={[styles.cancelBtn, { backgroundColor: colors.destructive + "15", borderColor: colors.destructive }]}
+            onPress={() => setShowCancelModal(true)}
+          >
+            <Feather name="x-circle" size={18} color={colors.destructive} />
           </Pressable>
         )}
         {!(booking as any).isPaid && booking.status !== "cancelled" && (

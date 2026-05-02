@@ -19,10 +19,13 @@ function calcDuration(startTime: string, endTime: string): number {
 }
 
 // Format a YYYY-MM-DD string safely without UTC timezone shift
-function formatDateSafe(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
+function formatDateSafe(dateStr: string | null | undefined): string {
+  if (!dateStr || !dateStr.includes("-")) return "N/A";
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return dateStr;
+  const [y, m, d] = parts.map(Number);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${String(d).padStart(2, "0")} ${months[m! - 1]} ${y}`;
+  return `${String(d).padStart(2, "0")} ${months[m! - 1] || "???"} ${y}`;
 }
 
 async function generateBookingRef(): Promise<string> {
@@ -559,21 +562,21 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
 
     const pdfBytes = await generatePremiumBookingPdf({
       bookingRef: b.bookingRef,
-      customerName: b.customerName,
-      phones: (b.phoneNumbers as string[]).join(", "),
-      address: b.address ?? "N/A",
+      customerName: b.customerName || "Customer",
+      phones: Array.isArray(b.phoneNumbers) ? b.phoneNumbers.join(", ") : "",
+      address: b.address || "N/A",
       bookingDate: formatDateSafe(b.bookingDate),
       tamilDate: b.tamilDateLabel ?? "",
       startTime: b.startTime,
       endTime: b.endTime,
       duration: String(b.durationHours),
       venues: venueList,
-      totalAmount: Number(b.totalAmount).toLocaleString('en-IN'),
-      advanceAmount: Number(b.advanceAmount).toLocaleString('en-IN'),
-      isPaid: b.isPaid,
+      totalAmount: Number(b.totalAmount || 0).toLocaleString('en-IN'),
+      advanceAmount: Number(b.advanceAmount || 0).toLocaleString('en-IN'),
+      isPaid: !!b.isPaid,
       notes: b.notes ?? "",
-      createdBy: createdBy[0]?.fullName ?? "Unknown",
-      createdAt: b.createdAt.toISOString(),
+      createdBy: createdBy[0]?.fullName ?? "Staff",
+      createdAt: (b.createdAt || new Date()).toISOString(),
       business: {
         name: settings.biz_name || "Bookal Venue",
         tagline: settings.biz_tagline || "Venue Booking Made Simple",
