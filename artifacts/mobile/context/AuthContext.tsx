@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const rawDomain = process.env["EXPO_PUBLIC_DOMAIN"] || "localhost:3000";
+    const rawDomain = process.env["EXPO_PUBLIC_DOMAIN"] || "bookal.onrender.com";
     const domain = rawDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
     const isLocal =
       domain.includes("localhost") ||

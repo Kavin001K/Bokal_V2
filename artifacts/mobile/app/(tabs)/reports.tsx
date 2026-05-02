@@ -118,7 +118,7 @@ export default function ReportsScreen() {
   const exportToPDF = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const domain = process.env["EXPO_PUBLIC_DOMAIN"] || "localhost:3000";
+      const domain = process.env["EXPO_PUBLIC_DOMAIN"] || "bookal.onrender.com";
       const isLocal = domain.includes("localhost") || domain.includes("127.0.0.1") || domain.includes("192.168.") || domain.includes("10.0.");
       const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
       

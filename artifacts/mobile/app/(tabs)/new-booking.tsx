@@ -166,7 +166,7 @@ export default function NewBookingScreen() {
   const getBaseUrl = () => {
     const domain = process.env["EXPO_PUBLIC_DOMAIN"];
     const isLocal = domain?.includes("localhost") || domain?.includes("127.0.0.1") || domain?.includes("192.168.") || domain?.includes("10.0.");
-    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "http://localhost:3001";
+    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "https://bookal.onrender.com";
   };
 
   const handleDownloadPdf = async () => {
@@ -358,7 +358,18 @@ export default function NewBookingScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => step > 0 ? setStep((s) => s - 1) : router.back()} hitSlop={8}>
+        <Pressable 
+          onPress={() => {
+            if (step > 0) {
+              setStep((s) => s - 1);
+            } else if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(tabs)");
+            }
+          }} 
+          hitSlop={8}
+        >
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>New Booking</Text>

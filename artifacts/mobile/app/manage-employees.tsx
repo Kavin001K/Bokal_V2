@@ -57,7 +57,16 @@ export default function ManageEmployeesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
+        <Pressable 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(tabs)");
+            }
+          }} 
+          hitSlop={8}
+        >
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Team Members</Text>

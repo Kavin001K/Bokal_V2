@@ -83,7 +83,7 @@ export default function BookingDetailScreen() {
       setDownloadingPdf(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      const envDomain = process.env["EXPO_PUBLIC_DOMAIN"] || "127.0.0.1:8080";
+      const envDomain = process.env["EXPO_PUBLIC_DOMAIN"] || "bookal.onrender.com";
       let domain = envDomain;
       if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
         domain = domain.replace('127.0.0.1', 'localhost');
@@ -92,7 +92,7 @@ export default function BookingDetailScreen() {
       const isLocal = domain.includes("localhost") || domain.includes("127.0.0.1") || domain.includes("192.168.");
       const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
       
-      console.log(`[PDF] Requesting receipt from ${baseUrl}/api/bookings/${booking.id}/pdf`);
+
       
       const pdfUrl = `${baseUrl}/api/bookings/${booking.id}/pdf?token=${token}`;
       
@@ -115,7 +115,7 @@ export default function BookingDetailScreen() {
       setMarkingPaid(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      const envDomain = process.env["EXPO_PUBLIC_DOMAIN"] || "127.0.0.1:8080";
+      const envDomain = process.env["EXPO_PUBLIC_DOMAIN"] || "bookal.onrender.com";
       let domain = envDomain;
       if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
         domain = domain.replace('127.0.0.1', 'localhost');
@@ -124,7 +124,7 @@ export default function BookingDetailScreen() {
       const isLocal = domain.includes("localhost") || domain.includes("127.0.0.1") || domain.includes("192.168.");
       const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
       
-      console.log(`[Payment] Attempting payment for ${booking.id} at ${baseUrl}/api/bookings/${booking.id}/pay`);
+
       
       const response = await fetch(`${baseUrl}/api/bookings/${booking.id}/pay`, {
         method: "POST",
@@ -135,7 +135,6 @@ export default function BookingDetailScreen() {
       });
       
       const result = await response.json();
-      console.log("[Payment] Server Response:", result);
       
       if (response.ok && (result.success || result.id)) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

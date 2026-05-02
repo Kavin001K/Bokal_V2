@@ -4,6 +4,16 @@
  */
 import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont } from "pdf-lib";
 
+/**
+ * Utility to clean text for PDF generation, removing characters that might cause
+ * issues with standard Helvetica fonts (which only support WinAnsiEncoding).
+ */
+function cleanText(text: string | null | undefined): string {
+  if (!text) return "";
+  // Remove non-standard characters that Helvetica can't render
+  return text.toString().replace(/[^\x20-\x7E]/g, "");
+}
+
 export interface BusinessInfo {
   name: string;
   tagline: string;
@@ -149,7 +159,7 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
     const infoValueSize = 10;
     
     page1.drawText("CLIENT INFORMATION", { x: margin, y, size: sectionTitleSize, font: bold, color: PRIMARY });
-    page1.drawText("EVENT SCHEDULE", { x: col2X, y: sectionTitleSize, y, size: sectionTitleSize, font: bold, color: PRIMARY });
+    page1.drawText("EVENT SCHEDULE", { x: col2X, y, size: sectionTitleSize, font: bold, color: PRIMARY });
     y -= 25;
     
     // Customer Name

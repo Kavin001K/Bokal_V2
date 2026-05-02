@@ -47,7 +47,7 @@ export default function EditProfileScreen() {
   const getBaseUrl = () => {
     const domain = process.env["EXPO_PUBLIC_DOMAIN"];
     const isLocal = domain?.includes("localhost") || domain?.includes("127.0.0.1") || domain?.includes("192.168.") || domain?.includes("10.0.");
-    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "http://localhost:3001";
+    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "https://bookal.onrender.com";
   };
 
   const handleSave = async () => {
@@ -116,7 +116,16 @@ export default function EditProfileScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} hitSlop={15}>
+        <Pressable 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(tabs)");
+            }
+          }} 
+          hitSlop={15}
+        >
           <Feather name="arrow-left" size={24} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Edit Profile</Text>

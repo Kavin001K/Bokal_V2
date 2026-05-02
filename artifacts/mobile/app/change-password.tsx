@@ -34,7 +34,13 @@ export default function ChangePasswordScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setSuccess(true);
         if (user) updateUser({ ...user, mustChangePw: false });
-        setTimeout(() => router.back(), 1500);
+        setTimeout(() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace("/(tabs)");
+          }
+        }, 1500);
       },
       onError: (err: { data?: { message?: string } }) => {
         setError(err?.data?.message ?? "Failed to change password");
@@ -55,7 +61,16 @@ export default function ChangePasswordScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
+        <Pressable 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(tabs)");
+            }
+          }} 
+          hitSlop={8}
+        >
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Change Password</Text>

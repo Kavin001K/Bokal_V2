@@ -63,6 +63,107 @@ async function logAudit(userId: string, action: string, entityType?: string, ent
   }
 }
 
+/**
+ * Generates a premium PDF for a booking, optionally merges with rules,
+ * uploads it to Supabase storage, and updates the database metadata.
+ */
+async function generateAndStoreBookingPdf(id: string) {
+  try {
+    // Determine if id is a UUID or a BookingRef
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+    
+    let bookingResult = [];
+    if (isUuid) {
+      bookingResult = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
+    }
+    
+    if (bookingResult.length === 0) {
+      bookingResult = await db.select().from(bookingsTable).where(eq(bookingsTable.bookingRef, id)).limit(1);
+    }
+
+    if (!bookingResult[0]) throw new Error("Booking not found");
+    const b = bookingResult[0];
+
+    const settingsRows = await db.select().from(settingsTable);
+    const settings: Record<string, string> = {};
+    settingsRows.forEach(s => settings[s.key] = s.value);
+
+    const venueRows = await db
+      .select({ venueName: venuesTable.name, pricePerHour: bookingVenuesTable.pricePerHour, subtotal: bookingVenuesTable.subtotal })
+      .from(bookingVenuesTable)
+      .innerJoin(venuesTable, eq(bookingVenuesTable.venueId, venuesTable.id))
+      .where(eq(bookingVenuesTable.bookingId, b.id));
+
+    const createdBy = await db.select().from(usersTable).where(eq(usersTable.id, b.createdById)).limit(1);
+
+    const venueList = venueRows.map((v) => ({
+      name: v.venueName,
+      price: Number(v.subtotal).toLocaleString('en-IN')
+    }));
+
+    const receiptPdf = await generatePremiumBookingPdf({
+      bookingRef: b.bookingRef,
+      customerName: b.customerName || "Customer",
+      phones: Array.isArray(b.phoneNumbers) ? b.phoneNumbers.join(", ") : "",
+      address: b.address || "N/A",
+      bookingDate: formatDateSafe(b.bookingDate),
+      tamilDate: b.tamilDateLabel ?? "",
+      startTime: b.startTime,
+      endTime: b.endTime,
+      duration: String(b.durationHours),
+      venues: venueList,
+      totalAmount: Number(b.totalAmount || 0).toLocaleString('en-IN'),
+      advanceAmount: Number(b.advanceAmount || 0).toLocaleString('en-IN'),
+      isPaid: !!b.isPaid,
+      notes: b.notes ?? "",
+      createdBy: createdBy[0]?.fullName ?? "Staff",
+      createdAt: (b.createdAt || new Date()).toISOString(),
+      business: {
+        name: settings["biz_name"] || "Bookal",
+        tagline: settings["biz_tagline"] || "Venue Booking Made Simple",
+        address: settings["biz_address"] || "Tamil Nadu, India",
+        phone: settings["biz_phone"] || "+91 98765 43210",
+        email: settings["biz_email"] || "contact@bookal.app",
+        gst: settings["biz_gst"] || ""
+      }
+    });
+
+    let finalPdf = receiptPdf;
+    try {
+      const rulesSetting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_path")).limit(1);
+      if (rulesSetting.length > 0 && rulesSetting[0]!.value) {
+        try {
+          const rulesBuffer = await downloadFromBucket("pdfs", rulesSetting[0]!.value);
+          finalPdf = await mergePdfs([receiptPdf, rulesBuffer]);
+        } catch (downloadErr) {
+          logger.error({ err: downloadErr }, "Failed to download rules from bucket for merging");
+        }
+      }
+    } catch (dbErr) {
+      logger.error({ err: dbErr }, "Failed to fetch rules path from settingsTable");
+    }
+
+    const sanitizedName = (b.customerName || "Customer").replace(/[/\\?%*:|"<>]/g, '-').trim();
+    const pdfFileName = `${sanitizedName}'s Booking.pdf`;
+    const bucketPath = `bookings/${b.id}/${pdfFileName}`;
+    
+    await uploadToBucket("pdfs", bucketPath, finalPdf);
+    
+    await db.delete(bookingPdfsTable).where(eq(bookingPdfsTable.bookingId, b.id));
+    await db.insert(bookingPdfsTable).values({
+      bookingId: b.id,
+      pdfData: bucketPath,
+      fileName: pdfFileName,
+      fileSize: finalPdf.length,
+    });
+
+    return { buffer: finalPdf, fileName: pdfFileName };
+  } catch (err) {
+    logger.error({ err, bookingId }, "generateAndStoreBookingPdf failed");
+    throw err;
+  }
+}
+
 async function formatBooking(b: typeof bookingsTable.$inferSelect, venues: Array<{
   id: string; bookingId: string; venueId: string; pricePerHour: string; subtotal: string;
   venue: typeof venuesTable.$inferSelect;
@@ -405,6 +506,11 @@ router.post("/bookings", requireAuth, async (req, res) => {
     db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1),
   ]);
 
+  // Background trigger PDF generation so it's ready in Supabase immediately
+  generateAndStoreBookingPdf(newBooking!.id).catch(err => {
+    logger.error({ err, bookingId: newBooking!.id }, "Automatic PDF generation failed after booking creation");
+  });
+
   res.status(201).json(await formatBooking(newBooking!, venueRows, createdByRows[0]));
 });
 
@@ -568,117 +674,14 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
   }
 
   try {
-    // Fetch booking data (try by UUID or by BookingRef)
-    let booking = [];
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id!);
-
-    if (isUuid) {
-      booking = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
-    }
-
-    if (booking.length === 0) {
-      booking = await db.select().from(bookingsTable).where(eq(bookingsTable.bookingRef, id!)).limit(1);
-    }
+    const { buffer, fileName } = await generateAndStoreBookingPdf(id!);
     
-    if (!booking[0]) {
-      res.status(404).json({ error: "Booking not found" });
-      return;
-    }
-    const b = booking[0];
-
-    // Fetch business settings for branding
-    const settingsRows = await db.select().from(settingsTable);
-    const settings: Record<string, string> = {};
-    settingsRows.forEach(s => settings[s.key] = s.value);
-
-    const venueRows = await db
-      .select({ venueName: venuesTable.name, pricePerHour: bookingVenuesTable.pricePerHour, subtotal: bookingVenuesTable.subtotal })
-      .from(bookingVenuesTable)
-      .innerJoin(venuesTable, eq(bookingVenuesTable.venueId, venuesTable.id))
-      .where(eq(bookingVenuesTable.bookingId, b.id));
-
-    const createdBy = await db.select().from(usersTable).where(eq(usersTable.id, b.createdById)).limit(1);
-
-    const venueList = venueRows.map((v) => ({
-      name: v.venueName,
-      price: Number(v.subtotal).toLocaleString('en-IN')
-    }));
-
-    console.log("!!! Starting PDF Generation for:", b.bookingRef);
-    const receiptPdf = await generatePremiumBookingPdf({
-      bookingRef: b.bookingRef,
-      customerName: b.customerName || "Customer",
-      phones: Array.isArray(b.phoneNumbers) ? b.phoneNumbers.join(", ") : "",
-      address: b.address || "N/A",
-      bookingDate: formatDateSafe(b.bookingDate),
-      tamilDate: b.tamilDateLabel ?? "",
-      startTime: b.startTime,
-      endTime: b.endTime,
-      duration: String(b.durationHours),
-      venues: venueList,
-      totalAmount: Number(b.totalAmount || 0).toLocaleString('en-IN'),
-      advanceAmount: Number(b.advanceAmount || 0).toLocaleString('en-IN'),
-      isPaid: !!b.isPaid,
-      notes: b.notes ?? "",
-      createdBy: createdBy[0]?.fullName ?? "Staff",
-      createdAt: (b.createdAt || new Date()).toISOString(),
-      business: {
-        name: settings["biz_name"] || "Bookal",
-        tagline: settings["biz_tagline"] || "Venue Booking Made Simple",
-        address: settings["biz_address"] || "Tamil Nadu, India",
-        phone: settings["biz_phone"] || "+91 98765 43210",
-        email: settings["biz_email"] || "contact@bookal.app",
-        gst: settings["biz_gst"] || ""
-      }
-    });
-    console.log("!!! Receipt PDF Generated, size:", receiptPdf.length);
-
-    // Try to merge with rules from bucket if available
-    let finalPdf = receiptPdf;
-    try {
-      const rulesSetting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_path")).limit(1);
-      
-      if (rulesSetting.length > 0 && rulesSetting[0]!.value) {
-        console.log("!!! Attempting to merge with rules:", rulesSetting[0]!.value);
-        try {
-          const rulesBuffer = await downloadFromBucket("pdfs", rulesSetting[0]!.value);
-          console.log("!!! Rules PDF downloaded, size:", rulesBuffer.length);
-          finalPdf = await mergePdfs([receiptPdf, rulesBuffer]);
-          console.log("!!! Merge successful, final size:", finalPdf.length);
-        } catch (downloadErr) {
-          logger.error({ err: downloadErr }, "Failed to download rules from bucket for merging, serving receipt only");
-        }
-      }
-    } catch (dbErr) {
-      logger.error({ err: dbErr }, "Failed to fetch rules path from settingsTable");
-    }
-
-    // Upload final PDF to bucket
-    const pdfFileName = `${b.customerName || "Customer"}'s Booking.pdf`;
-    const bucketPath = `bookings/${b.id}/${pdfFileName}`;
-    
-    try {
-      await uploadToBucket("pdfs", bucketPath, finalPdf);
-      
-      // Update metadata in DB (store path in pdfData column)
-      await db.delete(bookingPdfsTable).where(eq(bookingPdfsTable.bookingId, b.id));
-      await db.insert(bookingPdfsTable).values({
-        bookingId: b.id,
-        pdfData: bucketPath,
-        fileName: pdfFileName,
-        fileSize: finalPdf.length,
-      });
-      logger.info({ bookingId: b.id, path: bucketPath }, "Saved booking PDF to storage bucket");
-    } catch (uploadErr) {
-      logger.error({ err: uploadErr }, "Failed to upload generated PDF to bucket");
-    }
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(pdfFileName)}"`);
-    res.setHeader("Content-Length", finalPdf.length);
-    res.send(Buffer.from(finalPdf));
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.send(Buffer.from(buffer));
   } catch (err) {
     console.error("!!! PDF GENERATION CRITICAL ERROR:", err);
-    logger.error({ err, bookingId: id }, "PDF generation failed");
     res.status(500).json({ error: "Failed to generate PDF" });
   }
 });
