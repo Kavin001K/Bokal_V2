@@ -9,14 +9,14 @@ import { ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
-  
+  TextInput as RNTextInput,
   View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BookingCard from "@/components/BookingCard";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 
-function getDateRange(preset: string): { from: string; to: string } {
+function getDateRange(preset: string, customFrom?: string, customTo?: string): { from: string; to: string } {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -30,17 +30,31 @@ function getDateRange(preset: string): { from: string; to: string } {
   }
   if (preset === "month") {
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { from: fmt(start), to: today };
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { from: fmt(start), to: fmt(end) };
+  }
+  if (preset === "all") {
+    return { from: "2020-01-01", to: "2099-12-31" };
+  }
+  if (preset === "custom" && customFrom && customTo) {
+    return { from: customFrom, to: customTo };
   }
   return { from: today, to: today };
 }
+
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+import * as WebBrowser from "expo-web-browser";
 
 export default function ReportsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [preset, setPreset] = useState("month");
-  const { from, to } = getDateRange(preset);
+  const [customFrom, setCustomFrom] = useState(getDateRange("today").from);
+  const [customTo, setCustomTo] = useState(getDateRange("today").to);
+  
+  const { from, to } = getDateRange(preset, customFrom, customTo);
 
   const { data: summary, isLoading: summaryLoading } = useGetReportSummary(
     { from, to },
@@ -64,9 +78,46 @@ export default function ReportsScreen() {
 
   const PRESETS = [
     { key: "today", label: "Today" },
-    { key: "week", label: "This Week" },
-    { key: "month", label: "This Month" },
+    { key: "week", label: "Week" },
+    { key: "month", label: "Month" },
+    { key: "all", label: "All" },
+    { key: "custom", label: "Custom" },
   ];
+
+  const exportToCSV = async () => {
+    if (!summary || !bookingsData) return;
+    try {
+      const header = "Booking Ref,Customer,Phone,Date,Start,End,Amount,Status\n";
+      const rows = bookingsData.bookings.map((b: any) => 
+        `"${b.bookingRef}","${b.customerName}","${b.phoneNumbers?.[0]||""}","${b.bookingDate}","${b.startTime}","${b.endTime}","${b.totalAmount}","${b.status}"`
+      ).join("\n");
+      const fileUri = FileSystem.documentDirectory + `Bookal_Report_${from}_to_${to}.csv`;
+      await FileSystem.writeAsStringAsync(fileUri, header + rows);
+      await Sharing.shareAsync(fileUri, { UTI: 'public.comma-separated-values-text', dialogTitle: 'Export CSV' });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const { token } = useAuth();
+  const exportToPDF = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const domain = process.env["EXPO_PUBLIC_DOMAIN"] || "localhost:3000";
+      const isLocal = domain.includes("localhost") || domain.includes("192.168.") || domain.includes("10.0.");
+      const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
+      
+      const pdfUrl = `${baseUrl}/api/reports/pdf?from=${from}&to=${to}&token=${token}`;
+      
+      await WebBrowser.openBrowserAsync(pdfUrl, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+        controlsColor: colors.primary,
+        toolbarColor: colors.background,
+      });
+    } catch (err) {
+      Alert.alert("Error", "Could not generate PDF report.");
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -108,6 +159,42 @@ export default function ReportsScreen() {
         <Text style={[styles.dateRange, { color: colors.textMuted }]}>
           {new Date(from + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })} → {new Date(to + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
         </Text>
+
+        {preset === "custom" && (
+          <View style={styles.customDateRow}>
+            <RNTextInput
+              style={[styles.customDateInput, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.card }]}
+              placeholder="From (YYYY-MM-DD)"
+              placeholderTextColor={colors.textMuted}
+              value={customFrom}
+              onChangeText={setCustomFrom}
+            />
+            <RNTextInput
+              style={[styles.customDateInput, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.card }]}
+              placeholder="To (YYYY-MM-DD)"
+              placeholderTextColor={colors.textMuted}
+              value={customTo}
+              onChangeText={setCustomTo}
+            />
+          </View>
+        )}
+
+        <View style={styles.exportRow}>
+          <Pressable
+            style={[styles.exportBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+            onPress={exportToCSV}
+          >
+            <Feather name="file-text" size={16} color={colors.textPrimary} />
+            <Text style={[styles.exportBtnText, { color: colors.textPrimary }]}>Export CSV</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.exportBtn, { backgroundColor: colors.primary }]}
+            onPress={exportToPDF}
+          >
+            <Feather name="download" size={16} color="#fff" />
+            <Text style={[styles.exportBtnText, { color: "#fff" }]}>Download PDF</Text>
+          </Pressable>
+        </View>
 
         {summaryLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
@@ -236,15 +323,20 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 22, fontWeight: "800" as const },
   scroll: { flex: 1 },
-  presetRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  presetRow: { flexDirection: "row", gap: 6, marginBottom: 8 },
   presetBtn: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1.5,
     alignItems: "center",
   },
-  presetText: { fontSize: 12, fontWeight: "600" as const },
+  presetText: { fontSize: 11, fontWeight: "600" as const },
+  customDateRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
+  customDateInput: { flex: 1, borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14 },
+  exportRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
+  exportBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
+  exportBtnText: { fontWeight: "700" as const, fontSize: 13 },
   dateRange: { fontSize: 11, marginBottom: 16, textAlign: "center" },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   statCard: {

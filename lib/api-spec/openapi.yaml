@@ -810,6 +810,10 @@ components:
           type: number
         totalAmount:
           type: number
+        advanceAmount:
+          type: number
+        isPaid:
+          type: boolean
         notes:
           type: string
           nullable: true
@@ -879,6 +883,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BookingVenueItem"
+        advanceAmount:
+          type: number
+        isPaid:
+          type: boolean
         notes:
           type: string
           nullable: true

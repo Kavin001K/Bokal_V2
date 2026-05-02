@@ -10,7 +10,21 @@ export interface BusinessInfo {
   address: string;
   phone: string;
   email: string;
+  email: string;
   gst: string;
+}
+
+export interface ReportPdfData {
+  from: string;
+  to: string;
+  totalRevenue: string;
+  totalBookings: number;
+  confirmedBookings: number;
+  cancelledBookings: number;
+  avgValue: string;
+  byVenue: { name: string; revenue: string; count: number }[];
+  byEmployee: { name: string; revenue: string; count: number }[];
+  business?: BusinessInfo;
 }
 
 export interface BookingPdfData {
@@ -25,6 +39,8 @@ export interface BookingPdfData {
   duration: string;
   venues: { name: string; price: string }[];
   totalAmount: string;
+  advanceAmount: string;
+  isPaid: boolean;
   notes: string;
   createdBy: string;
   createdAt: string;
@@ -47,9 +63,15 @@ function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number,
   });
 }
 
+function cleanText(str: string): string {
+  if (!str) return "";
+  // Strip non-ASCII to prevent PDF-lib standard font crashes
+  return str.replace(/[^\x00-\x7F]/g, "");
+}
+
 function drawLabelValue(page: PDFPage, label: string, value: string, x: number, y: number, regular: PDFFont, bold: PDFFont) {
   page.drawText(label, { x, y, size: 9, font: regular, color: TEXT_MUTED });
-  page.drawText(value || "-", { x: x + 110, y, size: 9.5, font: bold, color: TEXT_DARK });
+  page.drawText(cleanText(value) || "-", { x: x + 110, y, size: 9.5, font: bold, color: TEXT_DARK });
 }
 
 export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<Uint8Array> {
@@ -75,10 +97,10 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
   // --- HEADER BLOCK ---
   page1.drawRectangle({ x: 0, y: height - 90, width, height: 90, color: PRIMARY });
 
-  page1.drawText(biz.name.toUpperCase(), {
+  page1.drawText(cleanText(biz.name).toUpperCase(), {
     x: margin, y: height - 38, size: 22, font: bold, color: WHITE,
   });
-  page1.drawText(biz.tagline, {
+  page1.drawText(cleanText(biz.tagline), {
     x: margin, y: height - 55, size: 10, font: regular, color: rgb(1, 0.92, 0.87),
   });
   if (biz.gst) {
@@ -145,7 +167,7 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
   // Venue rows
   for (const v of data.venues) {
     y -= 20;
-    page1.drawText(v.name, { x: margin, y, size: 10, font: regular, color: TEXT_DARK });
+    page1.drawText(cleanText(v.name), { x: margin, y, size: 10, font: regular, color: TEXT_DARK });
     const amtW = bold.widthOfTextAtSize(`Rs. ${v.price}`, 10);
     page1.drawText(`Rs. ${v.price}`, { x: rightEdge - amtW, y, size: 10, font: bold, color: TEXT_DARK });
   }
@@ -158,6 +180,23 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
   const totalW = bold.widthOfTextAtSize(`Rs. ${data.totalAmount}`, 15);
   page1.drawText(`Rs. ${data.totalAmount}`, { x: rightEdge - totalW, y, size: 15, font: bold, color: PRIMARY });
 
+  y -= 25;
+  const advanceLabel = "Advance Paid:";
+  page1.drawText(advanceLabel, { x: margin, y, size: 10, font: regular, color: TEXT_MUTED });
+  const advW = bold.widthOfTextAtSize(`Rs. ${data.advanceAmount}`, 10);
+  page1.drawText(`Rs. ${data.advanceAmount}`, { x: rightEdge - advW, y, size: 10, font: bold, color: TEXT_DARK });
+
+  y -= 20;
+  const balanceLabel = data.isPaid ? "PAYMENT STATUS:" : "BALANCE DUE:";
+  page1.drawText(balanceLabel, { x: margin, y, size: 11, font: bold, color: TEXT_DARK });
+  const balanceVal = data.isPaid ? "FULLY PAID" : `Rs. ${data.totalAmount.replace(/,/g, '')}`;
+  // For balance calculation, we need numbers
+  const totalNum = parseFloat(data.totalAmount.replace(/,/g, '')) || 0;
+  const advNum = parseFloat(data.advanceAmount.replace(/,/g, '')) || 0;
+  const balVal = data.isPaid ? "FULLY PAID" : `Rs. ${(totalNum - advNum).toLocaleString('en-IN')}`;
+  const balW = bold.widthOfTextAtSize(balVal, 12);
+  page1.drawText(balVal, { x: rightEdge - balW, y, size: 12, font: bold, color: data.isPaid ? rgb(0.1, 0.6, 0.1) : PRIMARY });
+
   // --- NOTES ---
   y -= 35;
   if (data.notes) {
@@ -166,7 +205,7 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
     // Word-wrap notes to max 80 chars per line
     const maxChars = 80;
     const noteLines = [];
-    let remaining = data.notes;
+    let remaining = cleanText(data.notes);
     while (remaining.length > maxChars) {
       let breakAt = remaining.lastIndexOf(" ", maxChars);
       if (breakAt === -1) breakAt = maxChars;
@@ -184,13 +223,13 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
   const footerY = 85;
   drawLine(page1, margin, footerY + 20, rightEdge, footerY + 20, 0.5);
 
-  page1.drawText(`Booked by: ${data.createdBy}  |  Created: ${new Date(data.createdAt).toLocaleString("en-IN")}`, {
+  page1.drawText(cleanText(`Booked by: ${data.createdBy}  |  Created: ${new Date(data.createdAt).toLocaleString("en-IN")}`), {
     x: margin, y: footerY + 6, size: 7.5, font: regular, color: TEXT_MUTED,
   });
-  page1.drawText(biz.address, {
+  page1.drawText(cleanText(biz.address), {
     x: margin, y: footerY - 8, size: 7.5, font: regular, color: TEXT_MUTED,
   });
-  page1.drawText(`P: ${biz.phone} | E: ${biz.email}`, {
+  page1.drawText(cleanText(`P: ${biz.phone} | E: ${biz.email}`), {
     x: margin, y: footerY - 20, size: 7.5, font: regular, color: TEXT_MUTED,
   });
 
@@ -280,6 +319,86 @@ export async function generatePremiumBookingPdf(data: BookingPdfData): Promise<U
   page2.drawText(biz.name, { x: m2, y: 55, size: 7.5, font: regular, color: TEXT_MUTED });
   const p2numW = regular.widthOfTextAtSize("Page 2/2", 7.5);
   page2.drawText("Page 2/2", { x: r2 - p2numW, y: 55, size: 7.5, font: regular, color: TEXT_MUTED });
+
+  return pdfDoc.save();
+}
+
+export async function generateProfessionalReportPdf(data: ReportPdfData): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  const page = pdfDoc.addPage([595, 842]);
+  const { width, height } = page.getSize();
+  const margin = 45;
+  const rightEdge = width - margin;
+
+  // Header
+  page.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: PRIMARY });
+  page.drawText("EXECUTIVE REPORT", { x: margin, y: height - 45, size: 24, font: bold, color: WHITE });
+  page.drawText(`${data.from} to ${data.to}`, { x: margin, y: height - 65, size: 10, font: regular, color: WHITE });
+
+  let y = height - 120;
+
+  // Summary Grid
+  page.drawText("PERFORMANCE SUMMARY", { x: margin, y, size: 10, font: bold, color: PRIMARY });
+  y -= 25;
+
+  const colWidth = (width - margin * 2) / 3;
+  
+  // Row 1
+  page.drawText("Total Revenue", { x: margin, y, size: 9, font: regular, color: TEXT_MUTED });
+  page.drawText("Total Bookings", { x: margin + colWidth, y, size: 9, font: regular, color: TEXT_MUTED });
+  page.drawText("Avg. Booking", { x: margin + colWidth * 2, y, size: 9, font: regular, color: TEXT_MUTED });
+  y -= 15;
+  page.drawText(`Rs. ${data.totalRevenue}`, { x: margin, y, size: 12, font: bold, color: TEXT_DARK });
+  page.drawText(`${data.totalBookings}`, { x: margin + colWidth, y, size: 12, font: bold, color: TEXT_DARK });
+  page.drawText(`Rs. ${data.avgValue}`, { x: margin + colWidth * 2, y, size: 12, font: bold, color: TEXT_DARK });
+
+  y -= 35;
+  
+  // Revenue by Venue
+  page.drawText("REVENUE BY VENUE", { x: margin, y, size: 10, font: bold, color: PRIMARY });
+  y -= 5;
+  drawLine(page, margin, y, rightEdge, y, 0.5);
+  y -= 18;
+  page.drawText("Venue Name", { x: margin, y, size: 9, font: bold, color: TEXT_MUTED });
+  page.drawText("Bookings", { x: margin + 250, y, size: 9, font: bold, color: TEXT_MUTED });
+  page.drawText("Revenue", { x: rightEdge - 80, y, size: 9, font: bold, color: TEXT_MUTED });
+  
+  for (const v of data.byVenue) {
+    y -= 20;
+    page.drawText(cleanText(v.name), { x: margin, y, size: 10, font: regular, color: TEXT_DARK });
+    page.drawText(`${v.count}`, { x: margin + 250, y, size: 10, font: regular, color: TEXT_DARK });
+    const revW = bold.widthOfTextAtSize(`Rs. ${v.revenue}`, 10);
+    page.drawText(`Rs. ${v.revenue}`, { x: rightEdge - revW, y, size: 10, font: bold, color: TEXT_DARK });
+  }
+
+  y -= 40;
+
+  // Revenue by Employee
+  page.drawText("PERFORMANCE BY EMPLOYEE", { x: margin, y, size: 10, font: bold, color: PRIMARY });
+  y -= 5;
+  drawLine(page, margin, y, rightEdge, y, 0.5);
+  y -= 18;
+  page.drawText("Employee Name", { x: margin, y, size: 9, font: bold, color: TEXT_MUTED });
+  page.drawText("Bookings", { x: margin + 250, y, size: 9, font: bold, color: TEXT_MUTED });
+  page.drawText("Total Value", { x: rightEdge - 80, y, size: 9, font: bold, color: TEXT_MUTED });
+
+  for (const e of data.byEmployee) {
+    y -= 20;
+    page.drawText(cleanText(e.name), { x: margin, y, size: 10, font: regular, color: TEXT_DARK });
+    page.drawText(`${e.count}`, { x: margin + 250, y, size: 10, font: regular, color: TEXT_DARK });
+    const revW = bold.widthOfTextAtSize(`Rs. ${e.revenue}`, 10);
+    page.drawText(`Rs. ${e.revenue}`, { x: rightEdge - revW, y, size: 10, font: bold, color: TEXT_DARK });
+  }
+
+  // Footer
+  const footerY = 50;
+  drawLine(page, margin, footerY + 20, rightEdge, footerY + 20, 0.5);
+  page.drawText(`Bookal Financial Report  |  Generated: ${new Date().toLocaleString()}`, {
+    x: margin, y: footerY + 6, size: 7.5, font: regular, color: TEXT_MUTED,
+  });
 
   return pdfDoc.save();
 }

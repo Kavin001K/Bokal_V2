@@ -74,6 +74,8 @@ async function formatBooking(b: typeof bookingsTable.$inferSelect, venues: Array
     endTime: b.endTime,
     durationHours: Number(b.durationHours),
     totalAmount: Number(b.totalAmount),
+    advanceAmount: Number(b.advanceAmount),
+    isPaid: b.isPaid,
     notes: b.notes ?? null,
     status: b.status,
     createdById: b.createdById,
@@ -348,6 +350,8 @@ router.post("/bookings", requireAuth, async (req, res) => {
       endTime,
       durationHours: String(durationHours),
       totalAmount: String(totalAmount),
+      advanceAmount: String(req.body.advanceAmount ?? 0),
+      isPaid: !!req.body.isPaid,
       notes: notes ?? null,
       status: "confirmed",
       createdById: req.user!.userId,
@@ -395,6 +399,8 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
       startTime: string;
       endTime: string;
       venues: Array<{ venueId: string; pricePerHour: number }>;
+      advanceAmount?: number;
+      isPaid?: boolean;
       notes?: string;
     };
 
@@ -420,6 +426,8 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
       endTime,
       durationHours: String(durationHours),
       totalAmount: String(totalAmount),
+      advanceAmount: req.body.advanceAmount !== undefined ? String(req.body.advanceAmount) : existing[0]!.advanceAmount,
+      isPaid: req.body.isPaid !== undefined ? !!req.body.isPaid : existing[0]!.isPaid,
       notes: notes ?? null,
       updatedAt: new Date(),
     })
@@ -452,6 +460,28 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
   ]);
 
   res.json(await formatBooking(updated[0]!, venueRows, createdByRows[0]));
+});
+
+router.post("/bookings/:id/pay", requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+  if (!existing[0]) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  await db
+    .update(bookingsTable)
+    .set({
+      isPaid: true,
+      updatedAt: new Date(),
+    })
+    .where(eq(bookingsTable.id, id!));
+
+  await logAudit(req.user!.userId, "mark_paid", "booking", id!);
+
+  res.json({ success: true, message: "Marked as paid" });
 });
 
 router.delete("/bookings/:id", requireAuth, async (req, res) => {
@@ -539,6 +569,8 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
       duration: String(b.durationHours),
       venues: venueList,
       totalAmount: Number(b.totalAmount).toLocaleString('en-IN'),
+      advanceAmount: Number(b.advanceAmount).toLocaleString('en-IN'),
+      isPaid: b.isPaid,
       notes: b.notes ?? "",
       createdBy: createdBy[0]?.fullName ?? "Unknown",
       createdAt: b.createdAt.toISOString(),

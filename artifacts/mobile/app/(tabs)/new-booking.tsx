@@ -6,10 +6,11 @@ import {
   useCreateBooking,
   useGetVenues,
   useSearchCustomers,
+  useGetBookings,
 } from "@workspace/api-client-react";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useMemo } from "react";
 import { ActivityIndicator,
   Alert,
   FlatList,
@@ -25,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import StepIndicator from "@/components/StepIndicator";
 import VenueCard from "@/components/VenueCard";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/context/AuthContext";
 import {
   TAMIL_MONTHS,
   formatEnglishDate,
@@ -72,6 +74,8 @@ interface FormState {
   tamilMonth: string;
   tamilDateNum: number;
   tamilYear: number;
+  advanceAmount: string;
+  isPaid: boolean;
 }
 
 const DEFAULT_FORM: FormState = {
@@ -88,12 +92,15 @@ const DEFAULT_FORM: FormState = {
   tamilMonth: "சித்திரை",
   tamilDateNum: 1,
   tamilYear: 2083,
+  advanceAmount: "",
+  isPaid: false,
 };
 
 export default function NewBookingScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
+  const { token } = useAuth();
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
@@ -107,6 +114,55 @@ export default function NewBookingScreen() {
     { query: { enabled: searchQuery.length >= 2 } }
   );
 
+  const { data: bookingsData } = useGetBookings(
+    { date: form.bookingDate },
+    { query: { queryKey: ["bookings", form.bookingDate] } }
+  );
+
+  // Fetch all bookings for a 6-month range to show busy days in calendar
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 1);
+  const sixMonthsHence = new Date();
+  sixMonthsHence.setMonth(sixMonthsHence.getMonth() + 5);
+  
+  const { data: allBookingsData } = useGetBookings(
+    { 
+      from: sixMonthsAgo.toISOString().split("T")[0], 
+      to: sixMonthsHence.toISOString().split("T")[0],
+      limit: 1000 
+    },
+    { query: { queryKey: ["all-bookings-range"] } }
+  );
+
+  const busyDates = useMemo(() => {
+    const dates = new Set<string>();
+    allBookingsData?.bookings?.forEach((b: any) => {
+      if (b.status !== "cancelled") {
+        dates.add(b.bookingDate);
+      }
+    });
+    return dates;
+  }, [allBookingsData]);
+  
+  const getConflictInfo = (venueId: string) => {
+    const todaysBookings = bookingsData?.bookings ?? [];
+    for (const b of todaysBookings) {
+      if (b.status === "cancelled") continue;
+      const hasVenue = b.venues.some((v: any) => v.venueId === venueId);
+      if (!hasVenue) continue;
+      // Overlap condition
+      if (b.startTime < form.endTime && form.startTime < b.endTime) {
+        return {
+          bookingRef: b.bookingRef,
+          customerName: b.customerName,
+          startTime: b.startTime,
+          endTime: b.endTime
+        };
+      }
+    }
+    return null;
+  };
+
   const getBaseUrl = () => {
     const domain = process.env["EXPO_PUBLIC_DOMAIN"];
     const isLocal = domain?.includes("localhost") || domain?.includes("192.168.") || domain?.includes("10.0.");
@@ -117,7 +173,7 @@ export default function NewBookingScreen() {
     if (!createdBooking) return;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const pdfUrl = `${getBaseUrl()}/api/bookings/${createdBooking.bookingRef}/pdf`;
+      const pdfUrl = `${getBaseUrl()}/api/bookings/${createdBooking.bookingRef}/pdf?token=${token}`;
       
       await WebBrowser.openBrowserAsync(pdfUrl, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
@@ -213,6 +269,14 @@ export default function NewBookingScreen() {
       Alert.alert("Required", step === 0 ? "Enter customer name and phone" : step === 1 ? "Select valid times" : "Select at least one venue");
       return;
     }
+    
+    if (step === 1) {
+      const invalidVenues = form.selectedVenueIds.filter(vid => !!getConflictInfo(vid));
+      if (invalidVenues.length > 0) {
+        setForm(f => ({ ...f, selectedVenueIds: f.selectedVenueIds.filter(vid => !invalidVenues.includes(vid)) }));
+      }
+    }
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setStep((s) => s + 1);
   };
@@ -236,6 +300,8 @@ export default function NewBookingScreen() {
         startTime: form.startTime,
         endTime: form.endTime,
         venues: venuePayload,
+        advanceAmount: parseFloat(form.advanceAmount) || 0,
+        isPaid: form.isPaid,
         notes: form.notes.trim() || undefined,
       },
     });
@@ -452,7 +518,18 @@ export default function NewBookingScreen() {
                   selectedDate={form.bookingDate}
                   onSelect={handleDateSelect}
                   colors={colors}
+                  busyDates={busyDates}
                 />
+                <View style={styles.calLegend}>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: colors.destructive }]} />
+                    <Text style={[styles.legendText, { color: colors.textSecondary }]}>Occupied (1+ Booking)</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+                    <Text style={[styles.legendText, { color: colors.textSecondary }]}>Selected</Text>
+                  </View>
+                </View>
                 <View style={[styles.tamilNote, { backgroundColor: colors.secondary }]}>
                   <Feather name="calendar" size={13} color={colors.primary} />
                   <Text style={[styles.tamilNoteText, { color: colors.textSecondary }]}>
@@ -586,26 +663,28 @@ export default function NewBookingScreen() {
         {step === 2 && (
           <View>
             <View style={styles.venueGrid}>
-              {venues.map((venue) => (
-                <View key={venue.id} style={styles.venueGridItem}>
-                  <VenueCard
-                    venue={venue}
-                    isSelected={form.selectedVenueIds.includes(venue.id)}
-                    isDisabled={false}
-                    durationHours={durationHours}
-                    customPrice={form.customPrices[venue.id]}
-                    onToggle={() => {
-                      const ids = form.selectedVenueIds.includes(venue.id)
-                        ? form.selectedVenueIds.filter((id) => id !== venue.id)
-                        : [...form.selectedVenueIds, venue.id];
-                      updateField("selectedVenueIds", ids);
-                    }}
-                    onPriceChange={(price) =>
-                      setForm((f) => ({ ...f, customPrices: { ...f.customPrices, [venue.id]: price } }))
-                    }
-                  />
-                </View>
-              ))}
+              {venues.map((venue) => {
+                const conflict = getConflictInfo(venue.id);
+                return (
+                  <View key={venue.id} style={styles.venueGridItem}>
+                    <VenueCard
+                      venue={venue}
+                      isSelected={form.selectedVenueIds.includes(venue.id)}
+                      isDisabled={!!conflict}
+                      conflictInfo={conflict}
+                      durationHours={durationHours}
+                      customPrice={form.customPrices[venue.id]}
+                      onToggle={() => {
+                        const ids = form.selectedVenueIds.includes(venue.id)
+                          ? form.selectedVenueIds.filter((id) => id !== venue.id)
+                          : [...form.selectedVenueIds, venue.id];
+                        updateField("selectedVenueIds", ids);
+                      }}
+                      onPriceChange={(price) => updateField("customPrices", { ...form.customPrices, [venue.id]: price })}
+                    />
+                  </View>
+                );
+              })}
             </View>
 
             {form.selectedVenueIds.length > 0 && (
@@ -677,6 +756,29 @@ export default function NewBookingScreen() {
                 <Text style={[styles.reviewTotalLabel, { color: colors.textPrimary }]}>TOTAL</Text>
                 <Text style={[styles.reviewTotalValue, { color: colors.primary }]}>₹{totalAmount.toLocaleString("en-IN")}</Text>
               </View>
+            </ReviewSection>
+
+            <ReviewSection title="Payment Details" colors={colors}>
+              <View style={styles.paymentField}>
+                <Text style={[styles.reviewLabel, { color: colors.textMuted }]}>Advance Amount</Text>
+                <TextInput
+                  style={[styles.advanceInput, { backgroundColor: colors.secondary, borderColor: colors.border, color: colors.primary }]}
+                  placeholder="0"
+                  placeholderTextColor={colors.textMuted}
+                  value={form.advanceAmount}
+                  onChangeText={(t) => updateField("advanceAmount", t)}
+                  keyboardType="number-pad"
+                />
+              </View>
+              <Pressable 
+                style={styles.paidToggle} 
+                onPress={() => updateField("isPaid", !form.isPaid)}
+              >
+                <View style={[styles.checkbox, { borderColor: colors.primary, backgroundColor: form.isPaid ? colors.primary : "transparent" }]}>
+                  {form.isPaid && <Feather name="check" size={12} color="#fff" />}
+                </View>
+                <Text style={[styles.paidToggleText, { color: colors.textPrimary }]}>Mark as Fully Paid</Text>
+              </Pressable>
             </ReviewSection>
 
             {form.notes ? (
@@ -784,7 +886,12 @@ function ReviewRow({ label, value, colors }: { label: string; value: string; col
   );
 }
 
-function SimpleCalendar({ selectedDate, onSelect, colors }: { selectedDate: string; onSelect: (d: string) => void; colors: ReturnType<typeof useColors> }) {
+function SimpleCalendar({ selectedDate, onSelect, colors, busyDates }: { 
+  selectedDate: string; 
+  onSelect: (d: string) => void; 
+  colors: ReturnType<typeof useColors>;
+  busyDates?: Set<string>;
+}) {
   const today = todayStr();
   const [viewDate, setViewDate] = useState(() => {
     const d = new Date(selectedDate + "T00:00:00");
@@ -833,27 +940,30 @@ function SimpleCalendar({ selectedDate, onSelect, colors }: { selectedDate: stri
           const isPast = dateStr < today;
           const isSelected = dateStr === selectedDate;
           const isToday = dateStr === today;
-          return (
-            <Pressable
-              key={idx}
-              style={[
-                styles.calCell,
-                isSelected && { backgroundColor: colors.primary, borderRadius: 8 },
-                isToday && !isSelected && { borderWidth: 1.5, borderColor: colors.primary, borderRadius: 8 },
-              ]}
-              onPress={() => !isPast && onSelect(dateStr)}
-              disabled={isPast}
-            >
-              <Text
+            const isBusy = busyDates?.has(dateStr);
+            return (
+              <Pressable
+                key={idx}
                 style={[
-                  styles.calDayText,
-                  { color: isPast ? colors.textMuted : isSelected ? "#fff" : colors.textPrimary },
+                  styles.calCell,
+                  isSelected && { backgroundColor: colors.primary, borderRadius: 8 },
+                  isToday && !isSelected && { borderWidth: 1.5, borderColor: colors.primary, borderRadius: 8 },
+                  !isSelected && isBusy && { backgroundColor: colors.destructive + "15" },
                 ]}
+                onPress={() => !isPast && onSelect(dateStr)}
+                disabled={isPast}
               >
-                {day}
-              </Text>
-            </Pressable>
-          );
+                <Text
+                  style={[
+                    styles.calDayText,
+                    { color: isPast ? colors.textMuted : isSelected ? "#fff" : isBusy ? colors.destructive : colors.textPrimary },
+                  ]}
+                >
+                  {day}
+                </Text>
+                {!isSelected && isBusy && <View style={[styles.busyDot, { backgroundColor: colors.destructive }]} />}
+              </Pressable>
+            );
         })}
       </View>
     </View>
@@ -968,8 +1078,35 @@ const styles = StyleSheet.create({
   calDayLabels: { flexDirection: "row", marginBottom: 8 },
   calDayLabel: { flex: 1, textAlign: "center", fontSize: 11, fontWeight: "600" as const },
   calGrid: { flexDirection: "row", flexWrap: "wrap" },
-  calCell: { width: "14.28%", aspectRatio: 1, alignItems: "center", justifyContent: "center" },
-  calDayText: { fontSize: 13 },
+  calCell: { width: "14.28%", aspectRatio: 1, alignItems: "center", justifyContent: "center", position: "relative" },
+  calDayText: { fontSize: 13, fontWeight: "600" as const },
+  busyDot: {
+    position: "absolute",
+    bottom: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+  calLegend: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    fontWeight: "500" as const,
+  },
   tamilNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -1086,6 +1223,41 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   successIcon: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  paymentField: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  advanceInput: {
+    width: 120,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    fontWeight: "700" as const,
+    textAlign: "right",
+  },
+  paidToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 4,
+    paddingVertical: 8,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paidToggleText: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+  },
   successTitle: { fontSize: 22, fontWeight: "800" as const, marginBottom: 8 },
   successRef: { fontSize: 16, fontWeight: "700" as const, marginBottom: 4 },
   successCustomer: { fontSize: 14, marginBottom: 8 },

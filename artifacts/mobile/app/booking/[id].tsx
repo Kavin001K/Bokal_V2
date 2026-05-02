@@ -123,6 +123,32 @@ Thank you for choosing us!`;
     Linking.openURL(`tel:${phone}`);
   };
 
+  const handleMarkPaid = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const domain = process.env["EXPO_PUBLIC_DOMAIN"] || "localhost:3000";
+      const isLocal = domain.includes("localhost") || domain.includes("192.168.") || domain.includes("10.0.");
+      const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
+      
+      const response = await fetch(`${baseUrl}/api/bookings/${booking.id}/pay`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+      
+      if (response.ok) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        refetch();
+      } else {
+        throw new Error("Failed to mark as paid");
+      }
+    } catch (err) {
+      Alert.alert("Error", "Could not mark booking as paid.");
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View
@@ -228,6 +254,16 @@ Thank you for choosing us!`;
             <Text style={[styles.totalLabel, { color: colors.textPrimary }]}>TOTAL</Text>
             <Text style={[styles.totalAmount, { color: colors.primary }]}>₹{Number(booking.totalAmount).toLocaleString("en-IN")}</Text>
           </View>
+          <View style={styles.paymentRow}>
+            <Text style={[styles.paymentLabel, { color: colors.textSecondary }]}>Advance Paid</Text>
+            <Text style={[styles.paymentValue, { color: colors.success }]}>- ₹{Number((booking as any).advanceAmount || 0).toLocaleString("en-IN")}</Text>
+          </View>
+          <View style={[styles.totalRow, { borderTopColor: colors.border, marginTop: 4, paddingTop: 12 }]}>
+            <Text style={[styles.balanceLabel, { color: colors.textPrimary }]}>{(booking as any).isPaid ? "PAID" : "BALANCE"}</Text>
+            <Text style={[styles.balanceAmount, { color: (booking as any).isPaid ? colors.success : colors.destructive }]}>
+              ₹{(booking as any).isPaid ? "0" : (Number(booking.totalAmount) - Number((booking as any).advanceAmount || 0)).toLocaleString("en-IN")}
+            </Text>
+          </View>
         </View>
 
         {booking.notes ? (
@@ -274,11 +310,19 @@ Thank you for choosing us!`;
           <Text style={[styles.pdfBtnText, { color: colors.primary }]}>PDF</Text>
         </Pressable>
         {canCancel && (
+          </Pressable>
+        )}
+        {!(booking as any).isPaid && booking.status !== "cancelled" && (
           <Pressable
-            style={[styles.cancelBtn, { backgroundColor: colors.destructive + "15", borderColor: colors.destructive }]}
-            onPress={() => setShowCancelModal(true)}
+            style={[styles.payBtn, { backgroundColor: colors.success + "15", borderColor: colors.success }]}
+            onPress={() => {
+              Alert.alert("Mark as Paid", "Are you sure you want to mark this booking as fully paid?", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Yes, Paid", onPress: handleMarkPaid }
+              ]);
+            }}
           >
-            <Feather name="x-circle" size={18} color={colors.destructive} />
+            <Feather name="dollar-sign" size={18} color={colors.success} />
           </Pressable>
         )}
       </View>
@@ -386,6 +430,12 @@ const styles = StyleSheet.create({
   pdfBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 50, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1.5 },
   pdfBtnText: { fontSize: 14, fontWeight: "700" as const },
   cancelBtn: { width: 50, height: 50, borderRadius: 12, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  payBtn: { width: 50, height: 50, borderRadius: 12, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  paymentRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  paymentLabel: { fontSize: 13, fontWeight: "500" as const },
+  paymentValue: { fontSize: 14, fontWeight: "700" as const },
+  balanceLabel: { fontSize: 15, fontWeight: "800" as const },
+  balanceAmount: { fontSize: 18, fontWeight: "800" as const },
   cancelBtnText: { fontSize: 14, fontWeight: "700" as const },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   cancelModal: { margin: 16, borderRadius: 20, padding: 24 },

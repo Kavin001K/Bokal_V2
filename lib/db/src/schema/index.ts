@@ -62,6 +62,8 @@ export const bookingsTable = pgTable("bookings", {
   endTime: text("end_time").notNull(),
   durationHours: decimal("duration_hours", { precision: 4, scale: 2 }).notNull(),
   totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
+  advanceAmount: decimal("advance_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  isPaid: boolean("is_paid").notNull().default(false),
   notes: text("notes"),
   status: text("status").notNull().default("confirmed"),
   createdById: uuid("created_by_id")
