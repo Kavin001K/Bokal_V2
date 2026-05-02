@@ -11,7 +11,6 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@expo-google-fonts/inter": "^0.4.0",
     "@expo/cli": "54.0.23",
     "@expo/ngrok": "^4.1.0",
     "@expo/vector-icons": "^15.0.3",
@@ -59,6 +58,7 @@
     "expo-document-picker": "*",
     "expo-file-system": "*",
     "expo-sharing": "*",
-    "expo-updates": "~29.0.17"
+    "expo-updates": "~29.0.17",
+    "@expo-google-fonts/inter": "^0.4.0"
   }
 }

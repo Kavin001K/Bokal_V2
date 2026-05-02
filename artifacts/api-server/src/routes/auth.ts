@@ -16,46 +16,55 @@ router.post("/auth/login", async (req, res) => {
     return;
   }
 
-  const user = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.email, email.toLowerCase().trim()))
-    .limit(1);
+  try {
+    const user = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email.toLowerCase().trim()))
+      .limit(1);
 
-  if (!user[0] || !user[0].isActive) {
-    res.status(401).json({ error: "Unauthorized", message: "Invalid email or password" });
-    return;
-  }
+    if (!user[0] || !user[0].isActive) {
+      res.status(401).json({ error: "Unauthorized", message: "Invalid email or password" });
+      return;
+    }
 
-  const valid = await bcrypt.compare(password, user[0].passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: "Unauthorized", message: "Invalid email or password" });
-    return;
-  }
+    const valid = await bcrypt.compare(password, user[0].passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: "Unauthorized", message: "Invalid email or password" });
+      return;
+    }
 
-  await db
-    .update(usersTable)
-    .set({ lastLogin: new Date() })
-    .where(eq(usersTable.id, user[0].id));
+    await db
+      .update(usersTable)
+      .set({ lastLogin: new Date() })
+      .where(eq(usersTable.id, user[0].id));
 
-  const token = signToken({
-    userId: user[0].id,
-    email: user[0].email,
-    name: user[0].fullName,
-    role: user[0].role,
-    mustChangePw: user[0].mustChangePw,
-  });
-
-  res.json({
-    token,
-    user: {
-      id: user[0].id,
-      fullName: user[0].fullName,
+    const token = signToken({
+      userId: user[0].id,
       email: user[0].email,
+      name: user[0].fullName,
       role: user[0].role,
       mustChangePw: user[0].mustChangePw,
-    },
-  });
+    });
+
+    res.json({
+      token,
+      user: {
+        id: user[0].id,
+        fullName: user[0].fullName,
+        email: user[0].email,
+        role: user[0].role,
+        mustChangePw: user[0].mustChangePw,
+      },
+    });
+  } catch (err: any) {
+    console.error("LOGIN ERROR:", err);
+    res.status(500).json({ 
+      error: "Internal Server Error", 
+      message: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined
+    });
+  }
 });
 
 router.post("/auth/change-password", requireAuth, async (req, res) => {
