@@ -38,9 +38,8 @@ import {
 const STEPS = ["Customer", "Date & Time", "Venues", "Review"];
 
 const TIME_OPTIONS: string[] = [];
-for (let h = 6; h < 24; h++) {
+for (let h = 0; h < 24; h++) {
   for (const m of [0, 30]) {
-    if (h === 23 && m === 30) continue;
     TIME_OPTIONS.push(
       `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
     );
@@ -57,7 +56,9 @@ function formatTime(t: string): string {
 function calcDuration(start: string, end: string): number {
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
-  return (eh! * 60 + em! - sh! * 60 - sm!) / 60;
+  let duration = (eh! * 60 + em! - sh! * 60 - sm!) / 60;
+  if (duration <= 0) duration += 24; // Handle midnight wrap-around
+  return duration;
 }
 
 interface FormState {
@@ -78,6 +79,8 @@ interface FormState {
   isPaid: boolean;
 }
 
+const initialTamilDate = gregorianToTamil(todayStr());
+
 const DEFAULT_FORM: FormState = {
   customerName: "",
   phoneNumbers: [""],
@@ -89,9 +92,9 @@ const DEFAULT_FORM: FormState = {
   customPrices: {},
   notes: "",
   tamilDateMode: false,
-  tamilMonth: "சித்திரை",
-  tamilDateNum: 1,
-  tamilYear: 2083,
+  tamilMonth: initialTamilDate.tamilMonth,
+  tamilDateNum: initialTamilDate.tamilDate,
+  tamilYear: initialTamilDate.tamilYear,
   advanceAmount: "",
   isPaid: false,
 };
@@ -642,7 +645,7 @@ export default function NewBookingScreen() {
               <FormField label="End Time" style={{ flex: 1 }}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 44 }}>
                   <View style={{ flexDirection: "row", gap: 8 }}>
-                    {TIME_OPTIONS.filter((t) => t > form.startTime).map((t) => (
+                    {TIME_OPTIONS.filter((t) => t !== form.startTime).map((t) => (
                       <Pressable
                         key={t}
                         style={[

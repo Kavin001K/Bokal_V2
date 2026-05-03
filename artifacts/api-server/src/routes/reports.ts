@@ -4,6 +4,11 @@ import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable, setting
 import { requireAdmin, requireAuth } from "../middlewares/auth.js";
 import { generateProfessionalReportPdf } from "../lib/pdf-generator.js";
 
+function parseDecimal(val: string | null | undefined): number {
+  if (val === null || val === undefined || val === "") return 0;
+  return parseFloat(val);
+}
+
 const router = Router();
 
 router.get("/reports/summary", requireAdmin, async (req, res) => {
@@ -36,7 +41,7 @@ router.get("/reports/summary", requireAdmin, async (req, res) => {
   ]);
 
   const notCancelled = bookings.filter((b) => b.status !== "cancelled");
-  const totalRevenue = notCancelled.reduce((sum, b) => sum + Number(b.totalAmount), 0);
+  const totalRevenue = notCancelled.reduce((sum, b) => sum + parseDecimal(b.totalAmount), 0);
   const avgBookingValue = notCancelled.length > 0 ? totalRevenue / notCancelled.length : 0;
 
   const byVenueMap = new Map<string, { venueName: string; bookingCount: number; revenue: number }>();
@@ -48,7 +53,7 @@ router.get("/reports/summary", requireAdmin, async (req, res) => {
     }
     const entry = byVenueMap.get(vr.venueId)!;
     entry.bookingCount += 1;
-    entry.revenue += Number(vr.subtotal);
+    entry.revenue += parseDecimal(vr.subtotal);
   }
 
   const byDayMap = new Map<string, { bookingCount: number; revenue: number }>();
@@ -56,7 +61,7 @@ router.get("/reports/summary", requireAdmin, async (req, res) => {
     if (!byDayMap.has(b.bookingDate)) byDayMap.set(b.bookingDate, { bookingCount: 0, revenue: 0 });
     const entry = byDayMap.get(b.bookingDate)!;
     entry.bookingCount += 1;
-    entry.revenue += Number(b.totalAmount);
+    entry.revenue += parseDecimal(b.totalAmount);
   }
 
   const byEmployeeMap = new Map<string, { userName: string; bookingCount: number; revenue: number }>();
@@ -67,7 +72,7 @@ router.get("/reports/summary", requireAdmin, async (req, res) => {
     }
     const entry = byEmployeeMap.get(b.createdById)!;
     entry.bookingCount += 1;
-    entry.revenue += Number(b.totalAmount);
+    entry.revenue += parseDecimal(b.totalAmount);
   }
 
   res.json({
@@ -137,7 +142,7 @@ router.get("/reports/export", requireAdmin, async (req, res) => {
   res.send(csv);
 });
 
-router.get("/reports/pdf", requireAuth, async (req, res) => {
+router.get("/reports/pdf", requireAdmin, async (req, res) => {
   const { from, to } = req.query as { from: string; to: string };
 
   if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
@@ -168,7 +173,7 @@ router.get("/reports/pdf", requireAuth, async (req, res) => {
     ]);
 
     const notCancelled = bookings.filter((b) => b.status !== "cancelled");
-    const totalRevenue = notCancelled.reduce((sum, b) => sum + Number(b.totalAmount), 0);
+    const totalRevenue = notCancelled.reduce((sum, b) => sum + parseDecimal(b.totalAmount), 0);
 
     const byVenueMap = new Map<string, { name: string; revenue: number; count: number }>();
     for (const vr of venueRows) {
@@ -176,7 +181,7 @@ router.get("/reports/pdf", requireAuth, async (req, res) => {
       if (bk?.status === "cancelled") continue;
       if (!byVenueMap.has(vr.venueId)) byVenueMap.set(vr.venueId, { name: vr.venueName, revenue: 0, count: 0 });
       const entry = byVenueMap.get(vr.venueId)!;
-      entry.revenue += Number(vr.subtotal);
+      entry.revenue += parseDecimal(vr.subtotal);
       entry.count += 1;
     }
 
@@ -185,7 +190,7 @@ router.get("/reports/pdf", requireAuth, async (req, res) => {
       const user = userRows.find((u) => u.id === b.createdById);
       if (!byEmployeeMap.has(b.createdById)) byEmployeeMap.set(b.createdById, { name: user?.fullName ?? "Unknown", revenue: 0, count: 0 });
       const entry = byEmployeeMap.get(b.createdById)!;
-      entry.revenue += Number(b.totalAmount);
+      entry.revenue += parseDecimal(b.totalAmount);
       entry.count += 1;
     }
 

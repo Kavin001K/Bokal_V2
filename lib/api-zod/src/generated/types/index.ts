@@ -38,5 +38,6 @@ export * from "./settingsResponse";
 export * from "./successResponse";
 export * from "./updateUserRequest";
 export * from "./updateVenuePriceBody";
+export * from "./uploadRulesPdfBody";
 export * from "./user";
 export * from "./venue";

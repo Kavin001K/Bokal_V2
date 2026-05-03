@@ -284,6 +284,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
 
+  /bookings/{id}/pay:
+    post:
+      operationId: markBookingAsPaid
+      tags: [bookings]
+      summary: Mark booking as fully paid
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Marked as paid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /bookings/{id}/pdf:
     get:
       operationId: getBookingPdf
@@ -980,6 +1013,24 @@ components:
           type: string
         rules_pdf_path:
           type: string
+        biz_name:
+          type: string
+          nullable: true
+        biz_tagline:
+          type: string
+          nullable: true
+        biz_address:
+          type: string
+          nullable: true
+        biz_phone:
+          type: string
+          nullable: true
+        biz_email:
+          type: string
+          nullable: true
+        biz_gst:
+          type: string
+          nullable: true
       required:
         - default_duration_hours
         - session_timeout_hours

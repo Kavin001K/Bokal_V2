@@ -17,5 +17,7 @@ export interface CreateBookingRequest {
   startTime: string;
   endTime: string;
   venues: BookingVenueItem[];
+  advanceAmount?: number;
+  isPaid?: boolean;
   notes?: string | null;
 }

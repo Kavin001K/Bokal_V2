@@ -150,6 +150,11 @@ export default function BookingDetailScreen() {
     }
   };
 
+  const handleCall = (phone: string) => {
+    if (!phone) return;
+    Linking.openURL(`tel:${phone.replace(/\s/g, "")}`);
+  };
+
   const formatEnglishDate = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
@@ -218,8 +223,8 @@ export default function BookingDetailScreen() {
           <View style={styles.infoRow}>
             <Text style={[styles.label, { color: colors.textMuted }]}>Phone</Text>
             <View style={styles.phoneGroup}>
-              {booking.phones?.map((p, i) => (
-                <Text key={i} style={[styles.value, { color: colors.textPrimary }]}>{p}{i < booking.phones!.length - 1 ? ", " : ""}</Text>
+              {booking.phoneNumbers?.map((p, i) => (
+                <Text key={i} style={[styles.value, { color: colors.textPrimary }]}>{p}{i < booking.phoneNumbers!.length - 1 ? ", " : ""}</Text>
               ))}
             </View>
           </View>
@@ -292,7 +297,7 @@ export default function BookingDetailScreen() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + 15, backgroundColor: colors.card, borderTopColor: colors.border }]}>
         <Pressable 
           style={[styles.callBtn, { backgroundColor: colors.primary }]}
-          onPress={() => handleCall(booking.phones?.[0] || "")}
+          onPress={() => handleCall(booking.phoneNumbers?.[0] || "")}
         >
           <Feather name="phone" size={18} color={WHITE} />
           <Text style={styles.callBtnText}>Call Customer</Text>

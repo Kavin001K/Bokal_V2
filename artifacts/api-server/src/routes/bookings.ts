@@ -9,7 +9,8 @@ import { firstString } from "../lib/express-utils.js";
 
 // Escape LIKE special characters to prevent pattern injection
 function escapeLike(str: string): string {
-  return str.replace(/[%_\\]/g, '\\$&');
+  // Escapes characters that have special meaning in SQL LIKE patterns
+  return str.replace(/[%_\\]/g, (match) => `\\${match}`);
 }
 
 const router = Router();
@@ -17,7 +18,14 @@ const router = Router();
 function calcDuration(startTime: string, endTime: string): number {
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
-  return (eh! * 60 + em! - sh! * 60 - sm!) / 60;
+  let duration = (eh! * 60 + em! - sh! * 60 - sm!) / 60;
+  if (duration <= 0) duration += 24; // Handle midnight wrap-around
+  return duration;
+}
+
+function parseDecimal(val: string | null | undefined): number {
+  if (val === null || val === undefined || val === "") return 0;
+  return parseFloat(val);
 }
 
 // Format a YYYY-MM-DD string safely without UTC timezone shift
@@ -179,9 +187,9 @@ async function formatBooking(b: typeof bookingsTable.$inferSelect, venues: Array
     tamilDateLabel: b.tamilDateLabel ?? null,
     startTime: b.startTime,
     endTime: b.endTime,
-    durationHours: Number(b.durationHours),
-    totalAmount: Number(b.totalAmount),
-    advanceAmount: Number(b.advanceAmount),
+    durationHours: parseDecimal(b.durationHours),
+    totalAmount: parseDecimal(b.totalAmount),
+    advanceAmount: parseDecimal(b.advanceAmount),
     isPaid: b.isPaid,
     notes: b.notes ?? null,
     status: b.status,
@@ -195,8 +203,8 @@ async function formatBooking(b: typeof bookingsTable.$inferSelect, venues: Array
       venueId: bv.venueId,
       venueName: bv.venue.name,
       venueType: bv.venue.type,
-      pricePerHour: Number(bv.pricePerHour),
-      subtotal: Number(bv.subtotal),
+      pricePerHour: parseDecimal(bv.pricePerHour),
+      subtotal: parseDecimal(bv.subtotal),
     })),
   };
 }
@@ -361,6 +369,17 @@ router.get("/bookings/:id", requireAuth, async (req, res) => {
     return;
   }
 
+  // --- CRITICAL FIX: IDOR PROTECTION ---
+  const isOwner = booking[0].createdById === req.user!.userId;
+  const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  const isAdmin = user[0]?.role === "admin";
+  
+  if (!isOwner && !isAdmin) {
+    res.status(403).json({ error: "Forbidden", message: "You do not have permission to view this booking" });
+    return;
+  }
+  // --- END OF FIX ---
+
   const [venueRows, createdByRows] = await Promise.all([
     db
       .select({
@@ -455,47 +474,72 @@ router.post("/bookings", requireAuth, async (req, res) => {
     return;
   }
 
-  const bookingRef = await generateBookingRef();
   const totalAmount = venues.reduce((sum, v) => sum + v.pricePerHour * durationHours, 0);
 
-  // Store phoneNumbers directly as array — JSONB column handles serialization
-  const [newBooking] = await db
-    .insert(bookingsTable)
-    .values({
-      bookingRef,
-      customerName,
-      phoneNumbers,
-      address: address ?? null,
-      idProofUrl: idProofUrl ?? null,
-      bookingDate,
-      tamilDateLabel: tamilDateLabel ?? null,
-      startTime,
-      endTime,
-      durationHours: String(durationHours),
-      totalAmount: String(totalAmount),
-      advanceAmount: String(req.body.advanceAmount ?? 0),
-      isPaid: !!req.body.isPaid,
-      notes: notes ?? null,
-      status: "confirmed",
-      createdById: req.user!.userId,
-    })
-    .returning();
+  const newBooking = await db.transaction(async (tx) => {
+    // --- FIX: Generate ref inside transaction to reduce race window ---
+    const year = new Date().getFullYear();
+    const prefix = `BKL-${year}-`;
+    const result = await tx
+      .select({ maxRef: sql<string>`MAX(${bookingsTable.bookingRef})` })
+      .from(bookingsTable)
+      .where(sql`${bookingsTable.bookingRef} LIKE ${prefix + "%"}`);
 
-  await db.insert(bookingVenuesTable).values(
-    venues.map((v) => ({
-      bookingId: newBooking!.id,
-      venueId: v.venueId,
-      pricePerHour: String(v.pricePerHour),
-      subtotal: String(v.pricePerHour * durationHours),
-    }))
-  );
+    const maxRef = result[0]?.maxRef;
+    const lastNum = maxRef ? parseInt(maxRef.split("-").pop() ?? "0") : 0;
+    const bookingRef = `${prefix}${String(lastNum + 1).padStart(4, "0")}`;
 
-  // Audit log
-  await logAudit(req.user!.userId, "create_booking", "booking", newBooking!.id, {
-    bookingRef,
-    customerName,
-    totalAmount,
+    const [inserted] = await tx
+      .insert(bookingsTable)
+      .values({
+        bookingRef,
+        customerName,
+        phoneNumbers,
+        address: address ?? null,
+        idProofUrl: idProofUrl ?? null,
+        bookingDate,
+        tamilDateLabel: tamilDateLabel ?? null,
+        startTime,
+        endTime,
+        durationHours: String(durationHours),
+        totalAmount: String(totalAmount),
+        advanceAmount: String(req.body.advanceAmount ?? 0),
+        isPaid: !!req.body.isPaid,
+        notes: notes ?? null,
+        status: "confirmed",
+        createdById: req.user!.userId,
+      })
+      .returning();
+
+    await tx.insert(bookingVenuesTable).values(
+      venues.map((v) => ({
+        bookingId: inserted!.id,
+        venueId: v.venueId,
+        pricePerHour: String(v.pricePerHour),
+        subtotal: String(v.pricePerHour * durationHours),
+      }))
+    );
+
+    // Audit log (inside transaction for consistency)
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.userId,
+      action: "create_booking",
+      entityType: "booking",
+      entityId: inserted!.id,
+      details: JSON.stringify({
+        bookingRef,
+        customerName,
+        totalAmount,
+      }),
+    });
+
+    return inserted;
   });
+  // Ensure newBooking is valid
+  if (!newBooking) {
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to create booking" });
+    return;
+  }
 
   const [venueRows, createdByRows] = await Promise.all([
     db
@@ -506,10 +550,14 @@ router.post("/bookings", requireAuth, async (req, res) => {
     db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1),
   ]);
 
-  // Background trigger PDF generation so it's ready in Supabase immediately
-  generateAndStoreBookingPdf(newBooking!.id).catch(err => {
+  // Trigger PDF generation and wait for it to ensure it's ready in Supabase
+  try {
+    await generateAndStoreBookingPdf(newBooking!.id);
+  } catch (err) {
     logger.error({ err, bookingId: newBooking!.id }, "Automatic PDF generation failed after booking creation");
-  });
+    // We don't fail the whole request since booking is already saved, 
+    // but the user will see an error when downloading.
+  }
 
   res.status(201).json(await formatBooking(newBooking!, venueRows, createdByRows[0]));
 });
@@ -543,43 +591,98 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
     return;
   }
 
+  // --- CRITICAL FIX: IDOR PROTECTION ---
+  const isOwner = existing[0].createdById === req.user!.userId;
+  const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  const isAdmin = user[0]?.role === "admin";
+  
+  if (!isOwner && !isAdmin) {
+    res.status(403).json({ error: "Forbidden", message: "You do not have permission to update this booking" });
+    return;
+  }
+  // --- END OF FIX ---
+
   const durationHours = calcDuration(startTime, endTime);
+  if (durationHours <= 0) {
+    res.status(400).json({ error: "Bad Request", message: "End time must be after start time" });
+    return;
+  }
+
+  // --- CRITICAL FIX: Check for conflicts before updating ---
+  const conflicts = [];
+  for (const v of venues) {
+    const conflicting = await db
+      .select({ bookingRef: bookingsTable.bookingRef, customerName: bookingsTable.customerName, startTime: bookingsTable.startTime, endTime: bookingsTable.endTime })
+      .from(bookingVenuesTable)
+      .innerJoin(bookingsTable, eq(bookingVenuesTable.bookingId, bookingsTable.id))
+      .innerJoin(venuesTable, eq(bookingVenuesTable.venueId, venuesTable.id))
+      .where(
+        and(
+          eq(bookingVenuesTable.venueId, v.venueId),
+          eq(bookingsTable.bookingDate, bookingDate),
+          eq(bookingsTable.status, "confirmed"),
+          ne(bookingsTable.id, id!), // Exclude current booking
+          sql`(${bookingsTable.startTime} < ${endTime} AND ${bookingsTable.endTime} > ${startTime})`
+        )
+      )
+      .limit(1);
+
+    if (conflicting[0]) {
+      const venue = await db.select().from(venuesTable).where(eq(venuesTable.id, v.venueId)).limit(1);
+      conflicts.push({ venueName: venue[0]?.name ?? v.venueId, ...conflicting[0] });
+    }
+  }
+
+  if (conflicts.length > 0) {
+    res.status(409).json({ error: "Booking conflict", conflicts });
+    return;
+  }
+  // --- END OF FIX ---
+
   const totalAmount = venues.reduce((sum, v) => sum + v.pricePerHour * durationHours, 0);
 
-  await db
-    .update(bookingsTable)
-    .set({
-      customerName,
-      phoneNumbers,
-      address: address ?? null,
-      idProofUrl: idProofUrl ?? null,
-      bookingDate,
-      tamilDateLabel: tamilDateLabel ?? null,
-      startTime,
-      endTime,
-      durationHours: String(durationHours),
-      totalAmount: String(totalAmount),
-      advanceAmount: req.body.advanceAmount !== undefined ? String(req.body.advanceAmount) : existing[0]!.advanceAmount,
-      isPaid: req.body.isPaid !== undefined ? !!req.body.isPaid : existing[0]!.isPaid,
-      notes: notes ?? null,
-      updatedAt: new Date(),
-    })
-    .where(eq(bookingsTable.id, id!));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(bookingsTable)
+      .set({
+        customerName,
+        phoneNumbers,
+        address: address ?? null,
+        idProofUrl: idProofUrl ?? null,
+        bookingDate,
+        tamilDateLabel: tamilDateLabel ?? null,
+        startTime,
+        endTime,
+        durationHours: String(durationHours),
+        totalAmount: String(totalAmount),
+        advanceAmount: req.body.advanceAmount !== undefined ? String(req.body.advanceAmount) : existing[0]!.advanceAmount,
+        isPaid: req.body.isPaid !== undefined ? !!req.body.isPaid : existing[0]!.isPaid,
+        notes: notes ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(bookingsTable.id, id!));
 
-  await db.delete(bookingVenuesTable).where(eq(bookingVenuesTable.bookingId, id!));
-  await db.insert(bookingVenuesTable).values(
-    venues.map((v) => ({
-      bookingId: id!,
-      venueId: v.venueId,
-      pricePerHour: String(v.pricePerHour),
-      subtotal: String(v.pricePerHour * durationHours),
-    }))
-  );
+    await tx.delete(bookingVenuesTable).where(eq(bookingVenuesTable.bookingId, id!));
+    await tx.insert(bookingVenuesTable).values(
+      venues.map((v) => ({
+        bookingId: id!,
+        venueId: v.venueId,
+        pricePerHour: String(v.pricePerHour),
+        subtotal: String(v.pricePerHour * durationHours),
+      }))
+    );
 
-  // Audit log
-  await logAudit(req.user!.userId, "update_booking", "booking", id!, {
-    customerName,
-    totalAmount,
+    // Audit log (inside transaction)
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.userId,
+      action: "update_booking",
+      entityType: "booking",
+      entityId: id!,
+      details: JSON.stringify({
+        customerName,
+        totalAmount,
+      }),
+    });
   });
 
   const updated = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
@@ -602,11 +705,23 @@ router.post("/bookings/:id/pay", requireAuth, async (req, res) => {
     return;
   }
 
-  const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id)).limit(1);
+  const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+
   if (!existing[0]) {
     res.status(404).json({ error: "Not found" });
     return;
   }
+
+  // --- CRITICAL FIX: IDOR PROTECTION ---
+  const isOwner = existing[0].createdById === req.user!.userId;
+  const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  const isAdmin = user[0]?.role === "admin";
+  
+  if (!isOwner && !isAdmin) {
+    res.status(403).json({ error: "Forbidden", message: "You do not have permission to mark this booking as paid" });
+    return;
+  }
+  // --- END OF FIX ---
 
   await db
     .update(bookingsTable)
@@ -642,6 +757,18 @@ router.delete("/bookings/:id", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Not found" });
     return;
   }
+
+  // --- CRITICAL FIX: IDOR PROTECTION ---
+  const isOwner = existing[0].createdById === req.user!.userId;
+  const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+  const isAdmin = user[0]?.role === "admin";
+  
+  if (!isOwner && !isAdmin) {
+    res.status(403).json({ error: "Forbidden", message: "You do not have permission to cancel this booking" });
+    return;
+  }
+  // --- END OF FIX ---
+
   if (existing[0].status === "cancelled") {
     res.status(409).json({ error: "Conflict", message: "Booking is already cancelled" });
     return;
@@ -674,6 +801,23 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
   }
 
   try {
+    const booking = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+    if (!booking[0]) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    // --- CRITICAL FIX: IDOR PROTECTION ---
+    const isOwner = booking[0].createdById === req.user!.userId;
+    const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
+    const isAdmin = user[0]?.role === "admin";
+    
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: "Forbidden", message: "You do not have permission to access this PDF" });
+      return;
+    }
+    // --- END OF FIX ---
+
     const { buffer, fileName } = await generateAndStoreBookingPdf(id!);
     
     res.setHeader("Content-Type", "application/pdf");

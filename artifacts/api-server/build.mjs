@@ -16,8 +16,7 @@ async function buildAll() {
 
   await esbuild({
     entryPoints: [
-      path.resolve(artifactDir, "src/index.ts"),
-      path.resolve(artifactDir, "src/test-pdf.ts")
+      path.resolve(artifactDir, "src/index.ts")
     ],
     platform: "node",
     bundle: true,

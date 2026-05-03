@@ -20,6 +20,8 @@ export interface Booking {
   endTime: string;
   durationHours: number;
   totalAmount: number;
+  advanceAmount?: number;
+  isPaid?: boolean;
   notes?: string | null;
   status: string;
   createdById: string;

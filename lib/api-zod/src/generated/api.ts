@@ -77,6 +77,8 @@ export const GetBookingsResponse = zod.object({
       endTime: zod.string(),
       durationHours: zod.number(),
       totalAmount: zod.number(),
+      advanceAmount: zod.number().optional(),
+      isPaid: zod.boolean().optional(),
       notes: zod.string().nullish(),
       status: zod.string(),
       createdById: zod.string(),
@@ -119,6 +121,8 @@ export const CreateBookingBody = zod.object({
       pricePerHour: zod.number(),
     }),
   ),
+  advanceAmount: zod.number().optional(),
+  isPaid: zod.boolean().optional(),
   notes: zod.string().nullish(),
 });
 
@@ -165,6 +169,8 @@ export const GetBookingResponse = zod.object({
   endTime: zod.string(),
   durationHours: zod.number(),
   totalAmount: zod.number(),
+  advanceAmount: zod.number().optional(),
+  isPaid: zod.boolean().optional(),
   notes: zod.string().nullish(),
   status: zod.string(),
   createdById: zod.string(),
@@ -206,6 +212,8 @@ export const UpdateBookingBody = zod.object({
       pricePerHour: zod.number(),
     }),
   ),
+  advanceAmount: zod.number().optional(),
+  isPaid: zod.boolean().optional(),
   notes: zod.string().nullish(),
 });
 
@@ -222,6 +230,8 @@ export const UpdateBookingResponse = zod.object({
   endTime: zod.string(),
   durationHours: zod.number(),
   totalAmount: zod.number(),
+  advanceAmount: zod.number().optional(),
+  isPaid: zod.boolean().optional(),
   notes: zod.string().nullish(),
   status: zod.string(),
   createdById: zod.string(),
@@ -255,6 +265,25 @@ export const CancelBookingBody = zod.object({
 export const CancelBookingResponse = zod.object({
   success: zod.boolean(),
   message: zod.string().optional(),
+});
+
+/**
+ * @summary Mark booking as fully paid
+ */
+export const MarkBookingAsPaidParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const MarkBookingAsPaidResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string().optional(),
+});
+
+/**
+ * @summary Download booking PDF
+ */
+export const GetBookingPdfParams = zod.object({
+  id: zod.coerce.string(),
 });
 
 /**
@@ -297,6 +326,12 @@ export const GetSettingsResponse = zod.object({
   default_duration_hours: zod.string(),
   session_timeout_hours: zod.string(),
   rules_pdf_path: zod.string(),
+  biz_name: zod.string().nullish(),
+  biz_tagline: zod.string().nullish(),
+  biz_address: zod.string().nullish(),
+  biz_phone: zod.string().nullish(),
+  biz_email: zod.string().nullish(),
+  biz_gst: zod.string().nullish(),
 });
 
 /**
@@ -306,12 +341,36 @@ export const UpdateSettingsBody = zod.object({
   default_duration_hours: zod.string(),
   session_timeout_hours: zod.string(),
   rules_pdf_path: zod.string(),
+  biz_name: zod.string().nullish(),
+  biz_tagline: zod.string().nullish(),
+  biz_address: zod.string().nullish(),
+  biz_phone: zod.string().nullish(),
+  biz_email: zod.string().nullish(),
+  biz_gst: zod.string().nullish(),
 });
 
 export const UpdateSettingsResponse = zod.object({
   default_duration_hours: zod.string(),
   session_timeout_hours: zod.string(),
   rules_pdf_path: zod.string(),
+  biz_name: zod.string().nullish(),
+  biz_tagline: zod.string().nullish(),
+  biz_address: zod.string().nullish(),
+  biz_phone: zod.string().nullish(),
+  biz_email: zod.string().nullish(),
+  biz_gst: zod.string().nullish(),
+});
+
+/**
+ * @summary Upload rules PDF (Base64)
+ */
+export const UploadRulesPdfBody = zod.object({
+  pdfData: zod.string(),
+});
+
+export const UploadRulesPdfResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string().optional(),
 });
 
 /**

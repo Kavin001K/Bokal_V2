@@ -2,7 +2,7 @@
  * Professional PDF Generator for Bookal using pdf-lib.
  * Generates a branded, high-fidelity receipt and terms & conditions.
  */
-import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, RGB } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, RGB, degrees } from "pdf-lib";
 
 export interface BusinessInfo {
   name: string;
@@ -67,8 +67,8 @@ const HEIGHT = 841.89; // A4 Height
 
 function cleanText(text: string | null | undefined): string {
   if (!text) return "";
-  // Remove non-standard characters that Helvetica can't render
-  return text.toString().replace(/[^\x20-\x7E]/g, "");
+  // More inclusive ASCII range but still safe for standard fonts
+  return text.toString().replace(/[^\x20-\x7E\s]/g, "");
 }
 
 function wrapText(text: string, maxWidth: number, font: PDFFont, fontSize: number): string[] {
@@ -170,16 +170,17 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
     let y = HEIGHT;
 
     const drawHeader = (p: PDFPage) => {
-      // Main Brown Header
-      p.drawRectangle({ x: 0, y: HEIGHT - 180, width: WIDTH, height: 180, color: COLORS.PRIMARY });
+      // Reduced Header Height for better space utilization
+      const headerH = 155;
+      p.drawRectangle({ x: 0, y: HEIGHT - headerH, width: WIDTH, height: headerH, color: COLORS.PRIMARY });
       
-      // Glassy decorative waves
-      [0.15, 0.08, 0.05].forEach((op, i) => {
+      // Glassy decorative waves (Subtle and Premium)
+      [0.12, 0.06, 0.03].forEach((op, i) => {
         p.drawEllipse({
-          x: WIDTH - (20 * i),
-          y: HEIGHT - (10 * i),
-          xScale: 300 - (i * 40),
-          yScale: 250 - (i * 30),
+          x: WIDTH - (25 * i),
+          y: HEIGHT - (15 * i),
+          xScale: 320 - (i * 50),
+          yScale: 220 - (i * 40),
           color: COLORS.WHITE,
           opacity: op
         });
@@ -223,34 +224,86 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
       drawBizInfo(biz.email, "mail");
       if (biz.gst) drawBizInfo(`GST: ${biz.gst}`, "document");
 
-      // Ref Badge
+      // Ref Badge (More Compact)
       const refText = `REF: ${data.bookingRef}`;
-      const refW = bold.widthOfTextAtSize(refText, 11);
-      p.drawRectangle({ x: WIDTH - MARGIN - refW - 24, y: HEIGHT - 155, width: refW + 24, height: 26, color: COLORS.ACCENT });
-      p.drawText(refText, { x: WIDTH - MARGIN - refW - 12, y: HEIGHT - 147, size: 11, font: bold, color: COLORS.WHITE });
+      const refW = bold.widthOfTextAtSize(refText, 10);
+      p.drawRectangle({ x: WIDTH - MARGIN - refW - 20, y: HEIGHT - 135, width: refW + 20, height: 22, color: COLORS.ACCENT });
+      p.drawText(refText, { x: WIDTH - MARGIN - refW - 10, y: HEIGHT - 128, size: 10, font: bold, color: COLORS.WHITE });
+    };
+
+    const drawWatermark = (p: PDFPage) => {
+      const wmText = "BOOKAL";
+      const wmW = bold.widthOfTextAtSize(wmText, 80);
+      p.drawText(wmText, {
+        x: (WIDTH - wmW) / 2,
+        y: HEIGHT / 2 - 40,
+        size: 80,
+        font: bold,
+        color: COLORS.BORDER,
+        opacity: 0.08,
+        rotate: degrees(45)
+      });
+
+      if (data.isPaid) {
+        const paidText = "PAID";
+        const paidW = bold.widthOfTextAtSize(paidText, 120);
+        p.drawText(paidText, {
+          x: WIDTH - 200,
+          y: 200,
+          size: 120,
+          font: bold,
+          color: COLORS.SUCCESS,
+          opacity: 0.1,
+          rotate: degrees(15)
+        });
+      }
     };
 
     const drawFooter = (p: PDFPage, pageNum: number) => {
-      p.drawRectangle({ x: MARGIN, y: 20, width: WIDTH - MARGIN * 2, height: 30, color: COLORS.BG_LIGHT });
-      p.drawText(`Page ${pageNum}`, { x: WIDTH / 2 - 20, y: 30, size: 9, font: regular, color: COLORS.TEXT_MUTED });
-      p.drawText(`Generated: ${new Date().toLocaleDateString()}`, { x: MARGIN + 15, y: 30, size: 8, font: regular, color: COLORS.TEXT_MUTED });
-      p.drawText("Bookal Management System", { x: WIDTH - MARGIN - 120, y: 30, size: 8, font: regular, color: COLORS.TEXT_MUTED });
+      p.drawRectangle({ x: MARGIN, y: 15, width: WIDTH - MARGIN * 2, height: 25, color: COLORS.BG_LIGHT });
+      p.drawText(`Page ${pageNum}`, { x: WIDTH / 2 - 15, y: 24, size: 8.5, font: regular, color: COLORS.TEXT_MUTED });
+      p.drawText(`Generated: ${new Date().toLocaleDateString()}`, { x: MARGIN + 12, y: 24, size: 7.5, font: regular, color: COLORS.TEXT_MUTED });
+      p.drawText("Premium Venue Management", { x: WIDTH - MARGIN - 110, y: 24, size: 7.5, font: regular, color: COLORS.TEXT_MUTED });
+    };
+
+    const drawSignatures = (p: PDFPage) => {
+      const sigY = 110; // Fixed bottom position
+      const sigW = 170;
+      
+      // Customer side
+      drawLine(p, MARGIN + 10, sigY + 25, MARGIN + sigW, sigY + 25, 0.8, COLORS.TEXT_DARK);
+      p.drawText("Customer Signature", { x: MARGIN + 30, y: sigY + 10, size: 9.5, font: regular, color: COLORS.TEXT_MUTED });
+
+      // Stamp & Seal Area (Centered)
+      const sealX = WIDTH / 2;
+      const sealY = sigY + 35;
+      p.drawCircle({ x: sealX, y: sealY, size: 32, borderColor: COLORS.ACCENT, borderWidth: 0.5, opacity: 0.2 });
+      p.drawCircle({ x: sealX, y: sealY, size: 28, borderColor: COLORS.ACCENT, borderWidth: 1.5 });
+      p.drawCircle({ x: sealX, y: sealY, size: 24, borderColor: COLORS.ACCENT, borderWidth: 0.5, opacity: 0.3 });
+      drawIcon(p, "crown", sealX, sealY, 16, COLORS.ACCENT);
+      p.drawText("OFFICIAL SEAL", { x: sealX - 25, y: sigY - 5, size: 7, font: bold, color: COLORS.ACCENT });
+
+      // Authorized side
+      const authX = WIDTH - MARGIN - sigW;
+      drawLine(p, authX, sigY + 25, WIDTH - MARGIN - 10, sigY + 25, 0.8, COLORS.TEXT_DARK);
+      p.drawText("Authorized Signature & Stamp", { x: authX + 15, y: sigY + 10, size: 9.5, font: regular, color: COLORS.TEXT_MUTED });
     };
 
     drawHeader(page);
-    y = HEIGHT - 220;
+    drawWatermark(page);
+    y = HEIGHT - 190;
 
-    // Title
+    // Title (More Elegant)
     const title = "BOOKING CONFIRMATION RECEIPT";
-    const titleW = bold.widthOfTextAtSize(title, 24);
-    page.drawText(title, { x: (WIDTH - titleW) / 2, y, size: 24, font: bold, color: COLORS.TEXT_DARK });
-    y -= 10;
-    drawLine(page, WIDTH/2 - 40, y, WIDTH/2 + 40, y, 2, COLORS.ACCENT);
-    y -= 45;
+    const titleW = bold.widthOfTextAtSize(title, 20);
+    page.drawText(title, { x: (WIDTH - titleW) / 2, y, size: 20, font: bold, color: COLORS.TEXT_DARK });
+    y -= 8;
+    drawLine(page, WIDTH/2 - 30, y, WIDTH/2 + 30, y, 1.5, COLORS.ACCENT);
+    y -= 35;
 
-    // Information Grid
+    // Information Grid (More Compact)
     const colW = (WIDTH - MARGIN * 2 - 30) / 2;
-    const cardH = 150;
+    const cardH = 135;
 
     // Card 1: Client
     page.drawRectangle({ x: MARGIN, y: y - cardH, width: colW, height: cardH, color: COLORS.WHITE, borderColor: COLORS.BORDER, borderWidth: 1 });
@@ -296,11 +349,12 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
 
     data.venues.forEach((v, i) => {
       // Check for page overflow
-      if (y < 180) {
+      if (y < 200) { // Keep enough space for table and signatures
         drawFooter(page, 1);
         page = pdfDoc.addPage([WIDTH, HEIGHT]);
         drawHeader(page);
-        y = HEIGHT - 220;
+        drawWatermark(page);
+        y = HEIGHT - 190;
         // Repeat table header
         page.drawRectangle({ x: MARGIN, y: y - 25, width: WIDTH - MARGIN * 2, height: 25, color: COLORS.BG_LIGHT });
         page.drawText("Description / Venue Name", { x: MARGIN + 15, y: y - 17, size: 10, font: bold, color: COLORS.ACCENT });
@@ -319,57 +373,82 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
       drawLine(page, MARGIN + 15, y + 20, WIDTH - MARGIN - 15, y + 20, 0.5, COLORS.BORDER);
     });
 
+    y -= 15;
+    
+    // Notes Section (If present)
+    if (data.notes && data.notes.trim()) {
+      if (y < 200) {
+        drawFooter(page, 1);
+        page = pdfDoc.addPage([WIDTH, HEIGHT]);
+        drawHeader(page);
+        drawWatermark(page);
+        y = HEIGHT - 190;
+      }
+      
+      drawSectionHeader(page, "SPECIAL INSTRUCTIONS", "document", MARGIN, y + 5, bold);
+      y -= 25;
+      const notesLines = wrapText(data.notes, WIDTH - MARGIN * 2 - 40, regular, 10);
+      notesLines.forEach(line => {
+        // Handle page overflow within notes
+        if (y < 120) {
+          drawFooter(page, 1);
+          page = pdfDoc.addPage([WIDTH, HEIGHT]);
+          drawHeader(page);
+          drawWatermark(page);
+          y = HEIGHT - 190;
+        }
+        page.drawText(cleanText(line), { x: MARGIN + 35, y, size: 10, font: regular, color: COLORS.TEXT_MUTED });
+        y -= 15;
+      });
+      y -= 10;
+    }
+
     // Totals Block
-    y -= 20;
-    if (y < 220) {
+    if (y < 240) { // Ensure totals and signatures don't clash
       drawFooter(page, 1);
       page = pdfDoc.addPage([WIDTH, HEIGHT]);
       drawHeader(page);
-      y = HEIGHT - 220;
+      drawWatermark(page);
+      y = HEIGHT - 190;
     }
 
-    const totalBoxH = 100;
-    page.drawRectangle({ x: MARGIN, y: y - totalBoxH, width: WIDTH - MARGIN * 2, height: totalBoxH, color: COLORS.WHITE, borderColor: COLORS.ACCENT, borderWidth: 1.5 });
+    const totalBoxH = 110;
+    page.drawRectangle({ x: MARGIN, y: y - totalBoxH, width: WIDTH - MARGIN * 2, height: totalBoxH, color: COLORS.BG_LIGHT, borderColor: COLORS.ACCENT, borderWidth: 1 });
     
     // Left side: Advance & Balance
     const totalVal = parseFloat(data.totalAmount.replace(/,/g, '')) || 0;
     const advVal = parseFloat(data.advanceAmount.replace(/,/g, '')) || 0;
     const balVal = totalVal - advVal;
 
-    page.drawText("Summary", { x: MARGIN + 25, y: y - 25, size: 12, font: bold, color: COLORS.TEXT_DARK });
-    page.drawText(`Advance Paid: Rs. ${data.advanceAmount}`, { x: MARGIN + 25, y: y - 45, size: 11, font: regular, color: COLORS.TEXT_MUTED });
-    page.drawText(`Balance Due: Rs. ${balVal.toLocaleString()}`, { x: MARGIN + 25, y: y - 65, size: 13, font: bold, color: COLORS.ACCENT });
+    page.drawText("FINANCIAL SUMMARY", { x: MARGIN + 25, y: y - 25, size: 11, font: bold, color: COLORS.PRIMARY });
+    
+    // Payment Status Badge
+    const statusText = data.isPaid ? "FULLY PAID" : "BALANCE DUE";
+    const statusColor = data.isPaid ? COLORS.SUCCESS : COLORS.ACCENT;
+    const stW = bold.widthOfTextAtSize(statusText, 8);
+    page.drawRectangle({ x: MARGIN + 25, y: y - 42, width: stW + 15, height: 14, color: statusColor, opacity: 0.15 });
+    page.drawText(statusText, { x: MARGIN + 32, y: y - 37, size: 8, font: bold, color: statusColor });
+
+    page.drawText(`Advance Paid: Rs. ${data.advanceAmount}`, { x: MARGIN + 25, y: y - 65, size: 10.5, font: regular, color: COLORS.TEXT_MUTED });
+    page.drawText(`Balance Due: Rs. ${balVal.toLocaleString('en-IN')}`, { x: MARGIN + 25, y: y - 85, size: 12, font: bold, color: COLORS.ACCENT });
 
     // Right side: Grand Total
     const gt = `Rs. ${data.totalAmount}`;
-    const gtW = bold.widthOfTextAtSize(gt, 42);
-    page.drawText("GRAND TOTAL", { x: WIDTH - MARGIN - gtW - 10, y: y - 35, size: 14, font: bold, color: COLORS.TEXT_DARK });
-    page.drawText(gt, { x: WIDTH - MARGIN - gtW - 10, y: y - 80, size: 42, font: bold, color: COLORS.PRIMARY });
+    const gtW = bold.widthOfTextAtSize(gt, 38);
+    page.drawText("GRAND TOTAL", { x: WIDTH - MARGIN - gtW - 10, y: y - 35, size: 13, font: bold, color: COLORS.TEXT_DARK });
+    page.drawText(gt, { x: WIDTH - MARGIN - gtW - 10, y: y - 80, size: 38, font: bold, color: COLORS.PRIMARY });
 
-    y -= (totalBoxH + 40);
+    y -= (totalBoxH + 30);
 
     // Signatures
-    const sigW = 180;
-    drawLine(page, MARGIN + 10, y + 20, MARGIN + sigW, y + 20, 1, COLORS.TEXT_DARK);
-    page.drawText("Customer Signature", { x: MARGIN + 35, y: y + 5, size: 10, font: regular, color: COLORS.TEXT_MUTED });
-
-    // Official Seal
-    const sealX = WIDTH / 2;
-    const sealY = y + 25;
-    page.drawCircle({ x: sealX, y: sealY, size: 28, borderColor: COLORS.ACCENT, borderWidth: 1, opacity: 0.5 });
-    page.drawCircle({ x: sealX, y: sealY, size: 24, borderColor: COLORS.ACCENT, borderWidth: 2 });
-    drawIcon(page, "crown", sealX, sealY, 15, COLORS.ACCENT);
-
-    const authX = WIDTH - MARGIN - sigW;
-    drawLine(page, authX, y + 20, WIDTH - MARGIN - 10, y + 20, 1, COLORS.TEXT_DARK);
-    page.drawText("Authorized Seal & Sign", { x: authX + 25, y: y + 5, size: 10, font: regular, color: COLORS.TEXT_MUTED });
-
+    drawSignatures(page);
     drawFooter(page, 1);
 
     // ─── PAGE 2: TERMS & CONDITIONS ──────────────────────────────────────────
     const termsPage = pdfDoc.addPage([WIDTH, HEIGHT]);
     drawHeader(termsPage);
-    let ty = HEIGHT - 220;
+    drawWatermark(termsPage);
+    let ty = HEIGHT - 190;
 
     const tTitle = "TERMS & CONDITIONS";
     const ttW = bold.widthOfTextAtSize(tTitle, 22);

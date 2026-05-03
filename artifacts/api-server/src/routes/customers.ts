@@ -14,25 +14,22 @@ router.get("/customers/search", requireAuth, async (req, res) => {
   }
 
   // Escape LIKE special characters
-  const escaped = q.replace(/[%_\\]/g, '\\$&');
+  const escaped = q.replace(/[%_\\]/g, (match) => `\\${match}`);
 
-  const results = await db
-    .selectDistinctOn([bookingsTable.customerName], {
-      customerName: bookingsTable.customerName,
-      phoneNumbers: bookingsTable.phoneNumbers,
-      address: bookingsTable.address,
-    })
-    .from(bookingsTable)
-    .where(
-      or(
-        ilike(bookingsTable.customerName, `%${escaped}%`),
-        sql`${bookingsTable.phoneNumbers}::text ILIKE ${"%" + escaped + "%"}`
-      )
-    )
-    .limit(10);
+  const results = await db.execute(sql`
+    SELECT DISTINCT ON (${bookingsTable.customerName}) 
+      ${bookingsTable.customerName} as "customerName",
+      ${bookingsTable.phoneNumbers} as "phoneNumbers",
+      ${bookingsTable.address} as "address"
+    FROM ${bookingsTable}
+    WHERE 
+      ${bookingsTable.customerName} ILIKE ${"%" + escaped + "%"}
+      OR ${bookingsTable.phoneNumbers}::text ILIKE ${"%" + escaped + "%"}
+    LIMIT 10
+  `);
 
   res.json(
-    results.map((r) => ({
+    results.rows.map((r: any) => ({
       customerName: r.customerName,
       phoneNumbers: r.phoneNumbers as string[],
       address: r.address ?? null,

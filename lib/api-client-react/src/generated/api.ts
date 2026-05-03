@@ -41,6 +41,7 @@ import type {
   SuccessResponse,
   UpdateUserRequest,
   UpdateVenuePriceBody,
+  UploadRulesPdfBody,
   User,
   Venue,
 } from "./api.schemas";
@@ -840,6 +841,177 @@ export const useCancelBooking = <
 };
 
 /**
+ * @summary Mark booking as fully paid
+ */
+export const getMarkBookingAsPaidUrl = (id: string) => {
+  return `/api/bookings/${id}/pay`;
+};
+
+export const markBookingAsPaid = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getMarkBookingAsPaidUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getMarkBookingAsPaidMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markBookingAsPaid>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markBookingAsPaid>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["markBookingAsPaid"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markBookingAsPaid>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return markBookingAsPaid(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkBookingAsPaidMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markBookingAsPaid>>
+>;
+
+export type MarkBookingAsPaidMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Mark booking as fully paid
+ */
+export const useMarkBookingAsPaid = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markBookingAsPaid>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markBookingAsPaid>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getMarkBookingAsPaidMutationOptions(options));
+};
+
+/**
+ * @summary Download booking PDF
+ */
+export const getGetBookingPdfUrl = (id: string) => {
+  return `/api/bookings/${id}/pdf`;
+};
+
+export const getBookingPdf = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetBookingPdfUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBookingPdfQueryKey = (id: string) => {
+  return [`/api/bookings/${id}/pdf`] as const;
+};
+
+export const getGetBookingPdfQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBookingPdf>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBookingPdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBookingPdfQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getBookingPdf>>> = ({
+    signal,
+  }) => getBookingPdf(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBookingPdf>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBookingPdfQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBookingPdf>>
+>;
+export type GetBookingPdfQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Download booking PDF
+ */
+
+export function useGetBookingPdf<
+  TData = Awaited<ReturnType<typeof getBookingPdf>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBookingPdf>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBookingPdfQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Get all venues
  */
 export const getGetVenuesUrl = () => {
@@ -1150,6 +1322,165 @@ export const useUpdateSettings = <
   TContext
 > => {
   return useMutation(getUpdateSettingsMutationOptions(options));
+};
+
+/**
+ * @summary Get rules PDF
+ */
+export const getGetRulesPdfUrl = () => {
+  return `/api/settings/rules-pdf`;
+};
+
+export const getRulesPdf = async (options?: RequestInit): Promise<Blob> => {
+  return customFetch<Blob>(getGetRulesPdfUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRulesPdfQueryKey = () => {
+  return [`/api/settings/rules-pdf`] as const;
+};
+
+export const getGetRulesPdfQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRulesPdf>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRulesPdf>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRulesPdfQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRulesPdf>>> = ({
+    signal,
+  }) => getRulesPdf({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRulesPdf>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRulesPdfQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRulesPdf>>
+>;
+export type GetRulesPdfQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get rules PDF
+ */
+
+export function useGetRulesPdf<
+  TData = Awaited<ReturnType<typeof getRulesPdf>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRulesPdf>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRulesPdfQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Upload rules PDF (Base64)
+ */
+export const getUploadRulesPdfUrl = () => {
+  return `/api/settings/rules-pdf`;
+};
+
+export const uploadRulesPdf = async (
+  uploadRulesPdfBody: UploadRulesPdfBody,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getUploadRulesPdfUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(uploadRulesPdfBody),
+  });
+};
+
+export const getUploadRulesPdfMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadRulesPdf>>,
+    TError,
+    { data: BodyType<UploadRulesPdfBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof uploadRulesPdf>>,
+  TError,
+  { data: BodyType<UploadRulesPdfBody> },
+  TContext
+> => {
+  const mutationKey = ["uploadRulesPdf"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof uploadRulesPdf>>,
+    { data: BodyType<UploadRulesPdfBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return uploadRulesPdf(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UploadRulesPdfMutationResult = NonNullable<
+  Awaited<ReturnType<typeof uploadRulesPdf>>
+>;
+export type UploadRulesPdfMutationBody = BodyType<UploadRulesPdfBody>;
+export type UploadRulesPdfMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Upload rules PDF (Base64)
+ */
+export const useUploadRulesPdf = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadRulesPdf>>,
+    TError,
+    { data: BodyType<UploadRulesPdfBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof uploadRulesPdf>>,
+  TError,
+  { data: BodyType<UploadRulesPdfBody> },
+  TContext
+> => {
+  return useMutation(getUploadRulesPdfMutationOptions(options));
 };
 
 /**
