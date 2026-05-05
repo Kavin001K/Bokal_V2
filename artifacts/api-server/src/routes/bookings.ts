@@ -4,7 +4,7 @@ import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable, auditLo
 import { requireAuth } from "../middlewares/auth.js";
 import { generateBookingConfirmationPdf, mergePdfs } from "../lib/pdf-generator.js";
 import { logger } from "../lib/logger.js";
-import { uploadToBucket, downloadFromBucket } from "../lib/supabase-storage.js";
+import { uploadToBucket, downloadFromBucket } from "../lib/r2-storage.js";
 import { firstString } from "../lib/express-utils.js";
 
 // Escape LIKE special characters to prevent pattern injection
@@ -20,7 +20,17 @@ function calcDuration(startTime: string, endTime: string): number {
   const [eh, em] = endTime.split(":").map(Number);
   let duration = (eh! * 60 + em! - sh! * 60 - sm!) / 60;
   if (duration <= 0) duration += 24; // Handle midnight wrap-around
-  return duration;
+  return roundCurrency(duration);
+}
+
+function roundCurrency(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function multiplyMoney(amount: number, quantity: number): number {
+  const amountCents = Math.round((amount + Number.EPSILON) * 100);
+  const quantityHundredths = Math.round((quantity + Number.EPSILON) * 100);
+  return (amountCents * quantityHundredths) / 10000;
 }
 
 function parseDecimal(val: string | null | undefined): number {
@@ -75,7 +85,7 @@ async function logAudit(userId: string, action: string, entityType?: string, ent
  * Generates a premium PDF for a booking, optionally merges with rules,
  * uploads it to Supabase storage, and updates the database metadata.
  */
-async function generateAndStoreBookingPdf(id: string) {
+async function generateAndStoreBookingPdf(id: string, adminId: string) {
   try {
     // Determine if id is a UUID or a BookingRef
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
@@ -92,7 +102,7 @@ async function generateAndStoreBookingPdf(id: string) {
     if (!bookingResult[0]) throw new Error("Booking not found");
     const b = bookingResult[0];
 
-    const settingsRows = await db.select().from(settingsTable);
+    const settingsRows = await db.select().from(settingsTable).where(eq(settingsTable.adminId, adminId));
     const settings: Record<string, string> = {};
     settingsRows.forEach(s => settings[s.key] = s.value);
 
@@ -138,7 +148,7 @@ async function generateAndStoreBookingPdf(id: string) {
 
     let finalPdf = receiptPdf;
     try {
-      const rulesSetting = await db.select().from(settingsTable).where(eq(settingsTable.key, "rules_pdf_path")).limit(1);
+      const rulesSetting = await db.select().from(settingsTable).where(and(eq(settingsTable.key, "rules_pdf_path"), eq(settingsTable.adminId, adminId))).limit(1);
       if (rulesSetting.length > 0 && rulesSetting[0]!.value) {
         try {
           const rulesBuffer = await downloadFromBucket("pdfs", rulesSetting[0]!.value);
@@ -153,7 +163,7 @@ async function generateAndStoreBookingPdf(id: string) {
 
     const sanitizedName = (b.customerName || "Customer").replace(/[/\\?%*:|"<>]/g, '-').trim();
     const pdfFileName = `${sanitizedName}'s Booking.pdf`;
-    const bucketPath = `bookings/${b.id}/${pdfFileName}`;
+    const bucketPath = `companies/${adminId}/bookings/${b.id}/${pdfFileName}`;
     
     await uploadToBucket("pdfs", bucketPath, finalPdf);
     
@@ -237,10 +247,9 @@ router.get("/bookings/availability", requireAuth, async (req, res) => {
         eq(bookingVenuesTable.venueId, venueId),
         eq(bookingsTable.bookingDate, date),
         eq(bookingsTable.status, "confirmed"),
+        eq(bookingsTable.adminId, req.user!.adminId),
         excludeBookingId ? ne(bookingsTable.id, excludeBookingId) : undefined,
-        sql`(
-          (${bookingsTable.startTime} < ${endTime} AND ${bookingsTable.endTime} > ${startTime})
-        )`
+        sql`NOT (${bookingsTable.endTime} <= ${startTime} OR ${bookingsTable.startTime} >= ${endTime})`
       )
     )
     .limit(1);
@@ -289,6 +298,8 @@ router.get("/bookings", requireAuth, async (req, res) => {
       )
     );
   }
+  
+  conditions.push(eq(bookingsTable.adminId, req.user!.adminId));
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -361,7 +372,7 @@ router.get("/bookings/:id", requireAuth, async (req, res) => {
   const booking = await db
     .select()
     .from(bookingsTable)
-    .where(eq(bookingsTable.id, id!))
+    .where(and(eq(bookingsTable.id, id!), eq(bookingsTable.adminId, req.user!.adminId)))
     .limit(1);
 
   if (!booking[0]) {
@@ -369,13 +380,8 @@ router.get("/bookings/:id", requireAuth, async (req, res) => {
     return;
   }
 
-  // --- CRITICAL FIX: IDOR PROTECTION ---
-  const isOwner = booking[0].createdById === req.user!.userId;
-  const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  const isAdmin = user[0]?.role === "admin";
-  
-  if (!isOwner && !isAdmin) {
-    res.status(403).json({ error: "Forbidden", message: "You do not have permission to view this booking" });
+  if (!booking[0]) {
+    res.status(403).json({ error: "Forbidden", message: "You do not have permission to view this booking or it does not exist" });
     return;
   }
   // --- END OF FIX ---
@@ -458,7 +464,8 @@ router.post("/bookings", requireAuth, async (req, res) => {
           eq(bookingVenuesTable.venueId, v.venueId),
           eq(bookingsTable.bookingDate, bookingDate),
           eq(bookingsTable.status, "confirmed"),
-          sql`(${bookingsTable.startTime} < ${endTime} AND ${bookingsTable.endTime} > ${startTime})`
+          eq(bookingsTable.adminId, req.user!.adminId),
+          sql`NOT (${bookingsTable.endTime} <= ${startTime} OR ${bookingsTable.startTime} >= ${endTime})`
         )
       )
       .limit(1);
@@ -474,7 +481,9 @@ router.post("/bookings", requireAuth, async (req, res) => {
     return;
   }
 
-  const totalAmount = venues.reduce((sum, v) => sum + v.pricePerHour * durationHours, 0);
+  const totalAmount = roundCurrency(
+    venues.reduce((sum, v) => sum + multiplyMoney(v.pricePerHour, durationHours), 0)
+  );
 
   const newBooking = await db.transaction(async (tx) => {
     // --- FIX: Generate ref inside transaction to reduce race window ---
@@ -501,13 +510,14 @@ router.post("/bookings", requireAuth, async (req, res) => {
         tamilDateLabel: tamilDateLabel ?? null,
         startTime,
         endTime,
-        durationHours: String(durationHours),
-        totalAmount: String(totalAmount),
+        durationHours: durationHours.toFixed(2),
+        totalAmount: totalAmount.toFixed(2),
         advanceAmount: String(req.body.advanceAmount ?? 0),
         isPaid: !!req.body.isPaid,
         notes: notes ?? null,
         status: "confirmed",
         createdById: req.user!.userId,
+        adminId: req.user!.adminId,
       })
       .returning();
 
@@ -516,7 +526,7 @@ router.post("/bookings", requireAuth, async (req, res) => {
         bookingId: inserted!.id,
         venueId: v.venueId,
         pricePerHour: String(v.pricePerHour),
-        subtotal: String(v.pricePerHour * durationHours),
+        subtotal: roundCurrency(multiplyMoney(v.pricePerHour, durationHours)).toFixed(2),
       }))
     );
 
@@ -552,7 +562,7 @@ router.post("/bookings", requireAuth, async (req, res) => {
 
   // Trigger PDF generation and wait for it to ensure it's ready in Supabase
   try {
-    await generateAndStoreBookingPdf(newBooking!.id);
+    await generateAndStoreBookingPdf(newBooking!.id, req.user!.adminId);
   } catch (err) {
     logger.error({ err, bookingId: newBooking!.id }, "Automatic PDF generation failed after booking creation");
     // We don't fail the whole request since booking is already saved, 
@@ -580,26 +590,21 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
       notes?: string;
     };
 
+  const adminId = req.user!.adminId;
+
   if (!id) {
     res.status(400).json({ error: "Bad Request", message: "Booking ID is required" });
     return;
   }
 
-  const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+  const existing = await db.select().from(bookingsTable).where(and(eq(bookingsTable.id, id!), eq(bookingsTable.adminId, adminId))).limit(1);
   if (!existing[0]) {
-    res.status(404).json({ error: "Not found" });
+    res.status(403).json({ error: "Forbidden", message: "Booking not found or access denied" });
     return;
   }
 
-  // --- CRITICAL FIX: IDOR PROTECTION ---
-  const isOwner = existing[0].createdById === req.user!.userId;
-  const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  const isAdmin = user[0]?.role === "admin";
-  
-  if (!isOwner && !isAdmin) {
-    res.status(403).json({ error: "Forbidden", message: "You do not have permission to update this booking" });
-    return;
-  }
+  // AdminId check is done above in existing fetch
+
   // --- END OF FIX ---
 
   const durationHours = calcDuration(startTime, endTime);
@@ -621,8 +626,9 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
           eq(bookingVenuesTable.venueId, v.venueId),
           eq(bookingsTable.bookingDate, bookingDate),
           eq(bookingsTable.status, "confirmed"),
+          eq(bookingsTable.adminId, adminId),
           ne(bookingsTable.id, id!), // Exclude current booking
-          sql`(${bookingsTable.startTime} < ${endTime} AND ${bookingsTable.endTime} > ${startTime})`
+          sql`NOT (${bookingsTable.endTime} <= ${startTime} OR ${bookingsTable.startTime} >= ${endTime})`
         )
       )
       .limit(1);
@@ -639,7 +645,9 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
   }
   // --- END OF FIX ---
 
-  const totalAmount = venues.reduce((sum, v) => sum + v.pricePerHour * durationHours, 0);
+  const totalAmount = roundCurrency(
+    venues.reduce((sum, v) => sum + multiplyMoney(v.pricePerHour, durationHours), 0)
+  );
 
   await db.transaction(async (tx) => {
     await tx
@@ -653,14 +661,14 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
         tamilDateLabel: tamilDateLabel ?? null,
         startTime,
         endTime,
-        durationHours: String(durationHours),
-        totalAmount: String(totalAmount),
+        durationHours: durationHours.toFixed(2),
+        totalAmount: totalAmount.toFixed(2),
         advanceAmount: req.body.advanceAmount !== undefined ? String(req.body.advanceAmount) : existing[0]!.advanceAmount,
         isPaid: req.body.isPaid !== undefined ? !!req.body.isPaid : existing[0]!.isPaid,
         notes: notes ?? null,
         updatedAt: new Date(),
       })
-      .where(eq(bookingsTable.id, id!));
+      .where(and(eq(bookingsTable.id, id!), eq(bookingsTable.adminId, adminId)));
 
     await tx.delete(bookingVenuesTable).where(eq(bookingVenuesTable.bookingId, id!));
     await tx.insert(bookingVenuesTable).values(
@@ -668,7 +676,7 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
         bookingId: id!,
         venueId: v.venueId,
         pricePerHour: String(v.pricePerHour),
-        subtotal: String(v.pricePerHour * durationHours),
+        subtotal: roundCurrency(multiplyMoney(v.pricePerHour, durationHours)).toFixed(2),
       }))
     );
 
@@ -705,22 +713,15 @@ router.post("/bookings/:id/pay", requireAuth, async (req, res) => {
     return;
   }
 
-  const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+  const existing = await db.select().from(bookingsTable).where(and(eq(bookingsTable.id, id!), eq(bookingsTable.adminId, req.user!.adminId))).limit(1);
 
   if (!existing[0]) {
-    res.status(404).json({ error: "Not found" });
+    res.status(403).json({ error: "Forbidden", message: "Access denied" });
     return;
   }
 
-  // --- CRITICAL FIX: IDOR PROTECTION ---
-  const isOwner = existing[0].createdById === req.user!.userId;
-  const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  const isAdmin = user[0]?.role === "admin";
-  
-  if (!isOwner && !isAdmin) {
-    res.status(403).json({ error: "Forbidden", message: "You do not have permission to mark this booking as paid" });
-    return;
-  }
+  // adminId filter above ensures security
+
   // --- END OF FIX ---
 
   await db
@@ -730,7 +731,7 @@ router.post("/bookings/:id/pay", requireAuth, async (req, res) => {
       advanceAmount: existing[0]!.totalAmount,
       updatedAt: new Date(),
     })
-    .where(eq(bookingsTable.id, id!));
+    .where(and(eq(bookingsTable.id, id!), eq(bookingsTable.adminId, req.user!.adminId)));
 
   await logAudit(req.user!.userId, "mark_paid", "booking", id!);
 
@@ -752,21 +753,14 @@ router.delete("/bookings/:id", requireAuth, async (req, res) => {
   }
 
   // Verify booking exists and is cancellable
-  const existing = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+  const existing = await db.select().from(bookingsTable).where(and(eq(bookingsTable.id, id!), eq(bookingsTable.adminId, req.user!.adminId))).limit(1);
   if (!existing[0]) {
-    res.status(404).json({ error: "Not found" });
+    res.status(403).json({ error: "Forbidden", message: "Access denied" });
     return;
   }
 
-  // --- CRITICAL FIX: IDOR PROTECTION ---
-  const isOwner = existing[0].createdById === req.user!.userId;
-  const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-  const isAdmin = user[0]?.role === "admin";
-  
-  if (!isOwner && !isAdmin) {
-    res.status(403).json({ error: "Forbidden", message: "You do not have permission to cancel this booking" });
-    return;
-  }
+  // adminId filter above ensures security
+
   // --- END OF FIX ---
 
   if (existing[0].status === "cancelled") {
@@ -783,7 +777,7 @@ router.delete("/bookings/:id", requireAuth, async (req, res) => {
       cancelReason: reason.trim(),
       updatedAt: new Date(),
     })
-    .where(eq(bookingsTable.id, id!));
+    .where(and(eq(bookingsTable.id, id!), eq(bookingsTable.adminId, req.user!.adminId)));
 
   // Audit log
   await logAudit(req.user!.userId, "cancel_booking", "booking", id!, { reason });
@@ -801,24 +795,16 @@ router.get("/bookings/:id/pdf", requireAuth, async (req, res) => {
   }
 
   try {
-    const booking = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id!)).limit(1);
+    const booking = await db.select().from(bookingsTable)
+      .where(and(eq(bookingsTable.id, id!), eq(bookingsTable.adminId, req.user!.adminId)))
+      .limit(1);
     if (!booking[0]) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-
-    // --- CRITICAL FIX: IDOR PROTECTION ---
-    const isOwner = booking[0].createdById === req.user!.userId;
-    const user = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).limit(1);
-    const isAdmin = user[0]?.role === "admin";
-    
-    if (!isOwner && !isAdmin) {
-      res.status(403).json({ error: "Forbidden", message: "You do not have permission to access this PDF" });
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
       return;
     }
     // --- END OF FIX ---
 
-    const { buffer, fileName } = await generateAndStoreBookingPdf(id!);
+    const { buffer, fileName } = await generateAndStoreBookingPdf(id!, req.user!.adminId);
     
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(fileName)}"`);

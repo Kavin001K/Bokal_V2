@@ -6,6 +6,7 @@ import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function TabLayout() {
   const colors = useColors();
@@ -14,6 +15,7 @@ export default function TabLayout() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const { user } = useAuth();
+  const { t } = useLanguage();
   const isAdmin = user?.role === "admin";
 
   return (
@@ -64,21 +66,21 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: t("home"),
           tabBarIcon: ({ color }) => <Feather name="home" size={21} color={color} />,
         }}
       />
       <Tabs.Screen
         name="new-booking"
         options={{
-          title: "New",
+          title: t("new"),
           tabBarIcon: ({ color }) => <Feather name="plus-circle" size={21} color={color} />,
         }}
       />
       <Tabs.Screen
         name="reports"
         options={{
-          title: "Reports",
+          title: t("reports"),
           tabBarIcon: ({ color }) => <Feather name="bar-chart-2" size={21} color={color} />,
           tabBarItemStyle: !isAdmin ? { display: "none" } : undefined,
         }}
@@ -86,9 +88,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Settings",
+          title: t("settings"),
           tabBarIcon: ({ color }) => <Feather name="settings" size={21} color={color} />,
           tabBarItemStyle: !isAdmin ? { display: "none" } : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="manage-venues"
+        options={{
+          href: null, // Hidden from tab bar
         }}
       />
     </Tabs>

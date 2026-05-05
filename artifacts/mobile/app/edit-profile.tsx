@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { AppAlertModal } from "@/components/AppAlertModal";
+import { getApiBaseUrl } from "@/lib/apiBaseUrl";
 
 export default function EditProfileScreen() {
   const colors = useColors();
@@ -44,18 +45,12 @@ export default function EditProfileScreen() {
     year: form.dateOfBirth ? form.dateOfBirth.split('-')[0] : "2000",
   });
 
-  const getBaseUrl = () => {
-    const domain = process.env["EXPO_PUBLIC_DOMAIN"];
-    const isLocal = domain?.includes("localhost") || domain?.includes("127.0.0.1") || domain?.includes("192.168.") || domain?.includes("10.0.");
-    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "https://bookal.onrender.com";
-  };
-
   const handleSave = async () => {
     try {
       setLoading(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      const res = await fetch(`${getBaseUrl()}/api/auth/profile`, {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

@@ -23,8 +23,9 @@ router.get("/customers/search", requireAuth, async (req, res) => {
       ${bookingsTable.address} as "address"
     FROM ${bookingsTable}
     WHERE 
-      ${bookingsTable.customerName} ILIKE ${"%" + escaped + "%"}
-      OR ${bookingsTable.phoneNumbers}::text ILIKE ${"%" + escaped + "%"}
+      (${bookingsTable.customerName} ILIKE ${"%" + escaped + "%"}
+      OR ${bookingsTable.phoneNumbers}::text ILIKE ${"%" + escaped + "%"})
+      AND ${bookingsTable.adminId} = ${req.user!.adminId}
     LIMIT 10
   `);
 

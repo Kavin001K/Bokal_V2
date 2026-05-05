@@ -1,14 +1,33 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import rateLimit from "express-rate-limit";
+import crypto from "node:crypto";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
+import { refreshTokensTable } from "@workspace/db/schema";
 import { signToken } from "../lib/auth.js";
 import { firstString } from "../lib/express-utils.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.js";
 
 const router = Router();
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "Too Many Requests",
+    message: "Too many login attempts. Please try again in 15 minutes.",
+  },
+});
 
-router.post("/auth/login", async (req, res) => {
+const REFRESH_TOKEN_TTL_DAYS = 30;
+
+function generateRefreshToken(): string {
+  return crypto.randomBytes(48).toString("base64url");
+}
+
+router.post("/auth/login", loginLimiter, async (req, res) => {
   const { email, password } = req.body as { email?: string; password?: string };
 
   if (!email || !password) {
@@ -20,11 +39,19 @@ router.post("/auth/login", async (req, res) => {
     const user = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.email, email.toLowerCase().trim()))
+      .where(and(
+        eq(usersTable.email, email.toLowerCase().trim()),
+        isNull(usersTable.deletedAt)
+      ))
       .limit(1);
 
-    if (!user[0] || !user[0].isActive) {
+    if (!user[0]) {
       res.status(401).json({ error: "Unauthorized", message: "Invalid email or password" });
+      return;
+    }
+
+    if (!user[0].isActive) {
+      res.status(401).json({ error: "Unauthorized", message: "Your account is disabled" });
       return;
     }
 
@@ -44,11 +71,23 @@ router.post("/auth/login", async (req, res) => {
       email: user[0].email,
       name: user[0].fullName,
       role: user[0].role,
+      adminId: user[0].role === "admin" ? user[0].id : (user[0].adminId ?? user[0].id),
       mustChangePw: user[0].mustChangePw,
+    });
+    const refreshToken = generateRefreshToken();
+    const deviceName = firstString(req.headers["x-device-name"]) ?? firstString(req.headers["user-agent"]) ?? null;
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+    await db.insert(refreshTokensTable).values({
+      userId: user[0].id,
+      token: refreshToken,
+      deviceName,
+      expiresAt,
     });
 
     res.json({
       token,
+      refreshToken,
       user: {
         id: user[0].id,
         fullName: user[0].fullName,
@@ -65,6 +104,73 @@ router.post("/auth/login", async (req, res) => {
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined
     });
   }
+});
+
+router.post("/auth/refresh", async (req, res) => {
+  const { refreshToken } = req.body as { refreshToken?: string };
+  if (!refreshToken) {
+    res.status(400).json({ error: "Bad Request", message: "Refresh token is required" });
+    return;
+  }
+
+  const now = new Date();
+  const tokenRows = await db
+    .select()
+    .from(refreshTokensTable)
+    .where(and(eq(refreshTokensTable.token, refreshToken), gt(refreshTokensTable.expiresAt, now)))
+    .limit(1);
+
+  if (!tokenRows[0]) {
+    res.status(401).json({ error: "Unauthorized", message: "Invalid or expired refresh token" });
+    return;
+  }
+
+  const userRows = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, tokenRows[0].userId))
+    .limit(1);
+
+  if (!userRows[0] || !userRows[0].isActive) {
+    await db.delete(refreshTokensTable).where(eq(refreshTokensTable.id, tokenRows[0].id));
+    res.status(401).json({ error: "Unauthorized", message: "User not active" });
+    return;
+  }
+
+  const user = userRows[0];
+  const newAccessToken = signToken({
+    userId: user.id,
+    email: user.email,
+    name: user.fullName,
+    role: user.role,
+    adminId: user.role === "admin" ? user.id : (user.adminId ?? user.id),
+    mustChangePw: user.mustChangePw,
+  });
+  const newRefreshToken = generateRefreshToken();
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+  await db.transaction(async (tx) => {
+    await tx.delete(refreshTokensTable).where(eq(refreshTokensTable.id, tokenRows[0]!.id));
+    await tx.insert(refreshTokensTable).values({
+      userId: user.id,
+      token: newRefreshToken,
+      deviceName: tokenRows[0]!.deviceName,
+      expiresAt,
+      lastUsedAt: now,
+    });
+  });
+
+  res.json({
+    token: newAccessToken,
+    refreshToken: newRefreshToken,
+    user: {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      mustChangePw: user.mustChangePw,
+    },
+  });
 });
 
 router.post("/auth/change-password", requireAuth, async (req, res) => {

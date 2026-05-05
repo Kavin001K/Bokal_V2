@@ -21,7 +21,8 @@ router.get("/reports/summary", requireAdmin, async (req, res) => {
 
   const whereClause = and(
     gte(bookingsTable.bookingDate, from),
-    lte(bookingsTable.bookingDate, to)
+    lte(bookingsTable.bookingDate, to),
+    eq(bookingsTable.adminId, req.user!.adminId)
   );
 
   const [bookings, venueRows, userRows] = await Promise.all([
@@ -37,7 +38,7 @@ router.get("/reports/summary", requireAdmin, async (req, res) => {
       .innerJoin(venuesTable, eq(bookingVenuesTable.venueId, venuesTable.id))
       .innerJoin(bookingsTable, eq(bookingVenuesTable.bookingId, bookingsTable.id))
       .where(whereClause),
-    db.select({ id: usersTable.id, fullName: usersTable.fullName }).from(usersTable),
+    db.select({ id: usersTable.id, fullName: usersTable.fullName }).from(usersTable).where(eq(usersTable.adminId, req.user!.adminId)),
   ]);
 
   const notCancelled = bookings.filter((b) => b.status !== "cancelled");
@@ -104,7 +105,11 @@ router.get("/reports/export", requireAdmin, async (req, res) => {
     })
     .from(bookingsTable)
     .innerJoin(usersTable, eq(bookingsTable.createdById, usersTable.id))
-    .where(and(gte(bookingsTable.bookingDate, from), lte(bookingsTable.bookingDate, to)));
+    .where(and(
+      gte(bookingsTable.bookingDate, from), 
+      lte(bookingsTable.bookingDate, to),
+      eq(bookingsTable.adminId, req.user!.adminId)
+    ));
 
   const venueRows = await db
     .select({ bookingId: bookingVenuesTable.bookingId, venueName: venuesTable.name })
@@ -153,7 +158,8 @@ router.get("/reports/pdf", requireAdmin, async (req, res) => {
   try {
     const whereClause = and(
       gte(bookingsTable.bookingDate, from),
-      lte(bookingsTable.bookingDate, to)
+      lte(bookingsTable.bookingDate, to),
+      eq(bookingsTable.adminId, req.user!.adminId)
     );
 
     const [bookings, venueRows, userRows] = await Promise.all([
@@ -169,7 +175,7 @@ router.get("/reports/pdf", requireAdmin, async (req, res) => {
         .innerJoin(venuesTable, eq(bookingVenuesTable.venueId, venuesTable.id))
         .innerJoin(bookingsTable, eq(bookingVenuesTable.bookingId, bookingsTable.id))
         .where(whereClause),
-      db.select({ id: usersTable.id, fullName: usersTable.fullName }).from(usersTable),
+      db.select({ id: usersTable.id, fullName: usersTable.fullName }).from(usersTable).where(eq(usersTable.adminId, req.user!.adminId)),
     ]);
 
     const notCancelled = bookings.filter((b) => b.status !== "cancelled");

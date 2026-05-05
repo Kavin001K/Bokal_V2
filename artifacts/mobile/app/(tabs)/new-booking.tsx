@@ -27,6 +27,7 @@ import StepIndicator from "@/components/StepIndicator";
 import VenueCard from "@/components/VenueCard";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import { getApiBaseUrl } from "@/lib/apiBaseUrl";
 import {
   TAMIL_MONTHS,
   formatEnglishDate,
@@ -166,17 +167,11 @@ export default function NewBookingScreen() {
     return null;
   };
 
-  const getBaseUrl = () => {
-    const domain = process.env["EXPO_PUBLIC_DOMAIN"];
-    const isLocal = domain?.includes("localhost") || domain?.includes("127.0.0.1") || domain?.includes("192.168.") || domain?.includes("10.0.");
-    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "https://bookal.onrender.com";
-  };
-
   const handleDownloadPdf = async () => {
     if (!createdBooking) return;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const pdfUrl = `${getBaseUrl()}/api/bookings/${createdBooking.bookingRef}/pdf?token=${token}`;
+      const pdfUrl = `${getApiBaseUrl()}/api/bookings/${createdBooking.bookingRef}/pdf?token=${token}`;
       
       await WebBrowser.openBrowserAsync(pdfUrl, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,

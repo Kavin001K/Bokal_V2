@@ -11,6 +11,7 @@ export interface JwtPayload {
   email: string;
   name: string;
   role: string;
+  adminId: string;
   mustChangePw: boolean;
 }
 

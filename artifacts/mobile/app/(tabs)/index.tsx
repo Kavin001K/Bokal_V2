@@ -1,10 +1,10 @@
 import { AnimatedButton } from "@/components/AnimatedButton";
 import { Text, TextInput } from "@/components/Typography";
 import { Feather } from "@expo/vector-icons";
-import { useGetBookings, useGetSettings } from "@workspace/api-client-react";
+import { useGetBookings, useGetSettings, useGetVenues } from "@workspace/api-client-react";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -27,7 +27,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import BookingCard from "@/components/BookingCard";
+import { Skeleton } from "@/components/Skeleton";
 import { useColors } from "@/hooks/useColors";
 import { gregorianToTamil, todayStr, tomorrowStr } from "@/utils/tamilCalendar";
 import type { Booking } from "@workspace/api-client-react";
@@ -46,6 +48,7 @@ export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -63,24 +66,28 @@ export default function HomeScreen() {
   );
 
   const bookings: Booking[] = data?.bookings ?? [];
+  const { data: venuesData } = useGetVenues();
+  const activeVenues = (venuesData ?? []).filter((v) => v.isActive);
 
-  const filtered = search.trim()
-    ? bookings.filter(
-        (b) =>
-          b.customerName.toLowerCase().includes(search.toLowerCase()) ||
-          b.phoneNumbers?.some((p) => p.includes(search))
-      )
-    : bookings;
+  const filtered = useMemo(() => (
+    search.trim()
+      ? bookings.filter(
+          (b) =>
+            b.customerName.toLowerCase().includes(search.toLowerCase()) ||
+            b.phoneNumbers?.some((p) => p.includes(search))
+        )
+      : bookings
+  ), [bookings, search]);
 
-  const todayBookings = filtered.filter((b) => b.bookingDate === today);
-  const tomorrowBookings = filtered.filter((b) => b.bookingDate === tomorrow);
-  const upcomingBookings = filtered.filter(
+  const todayBookings = useMemo(() => filtered.filter((b) => b.bookingDate === today), [filtered, today]);
+  const tomorrowBookings = useMemo(() => filtered.filter((b) => b.bookingDate === tomorrow), [filtered, tomorrow]);
+  const upcomingBookings = useMemo(() => filtered.filter(
     (b) => b.bookingDate > tomorrow
-  ).sort((a, b) => a.bookingDate.localeCompare(b.bookingDate));
+  ).sort((a, b) => a.bookingDate.localeCompare(b.bookingDate)), [filtered, tomorrow]);
 
-  const pastBookings = filtered.filter(
+  const pastBookings = useMemo(() => filtered.filter(
     (b) => b.bookingDate < today
-  ).sort((a, b) => b.bookingDate.localeCompare(a.bookingDate));
+  ).sort((a, b) => b.bookingDate.localeCompare(a.bookingDate)), [filtered, today]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -89,15 +96,12 @@ export default function HomeScreen() {
   };
 
   const totalToday = todayBookings.length;
-  const mahalFree = !todayBookings.some((b) =>
-    b.venues?.some((v) => v.venueType === "mahal") && b.status === "confirmed"
-  );
-  
-  const roomsBooked = todayBookings.filter((b) => b.status === "confirmed").reduce((count, b) => {
-    const roomCount = b.venues?.filter((v) => v.venueType === "room").length ?? 0;
-    return count + roomCount;
-  }, 0);
-  const roomsFree = Math.max(0, 3 - roomsBooked);
+  const confirmedToday = todayBookings.filter((b) => b.status === "confirmed");
+  const totalHalls = activeVenues.filter((v) => v.type === "mahal").length;
+  const totalRooms = activeVenues.filter((v) => v.type === "room").length;
+  const hallsBooked = confirmedToday.reduce((count, b) => count + (b.venues?.filter((v) => v.venueType === "mahal").length ?? 0), 0);
+  const roomsBooked = confirmedToday.reduce((count, b) => count + (b.venues?.filter((v) => v.venueType === "room").length ?? 0), 0);
+  const hallsFree = Math.max(0, totalHalls - hallsBooked);
 
   const todayRevenue = todayBookings
     .filter(b => b.status === 'confirmed' || b.status === 'completed')
@@ -175,27 +179,38 @@ export default function HomeScreen() {
           <Animated.View entering={FadeInRight.delay(200)} style={[styles.statPill, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '20' }]}>
             <Feather name="trending-up" size={14} color={colors.primary} />
             <Text style={[styles.pillValue, { color: colors.primary }]}>₹{todayRevenue.toLocaleString('en-IN')}</Text>
-            <Text style={[styles.pillLabel, { color: colors.textMuted }]}>Revenue</Text>
+            <Text style={[styles.pillLabel, { color: colors.textMuted }]}>{t("revenue")}</Text>
           </Animated.View>
 
-          <Animated.View entering={FadeInRight.delay(300)} style={[styles.statPill, { backgroundColor: mahalFree ? '#10B98110' : '#EF444410', borderColor: mahalFree ? '#10B98120' : '#EF444420' }]}>
-            <View style={[styles.miniPulse, { backgroundColor: mahalFree ? '#10B981' : '#EF4444' }]} />
-            <Text style={[styles.pillValue, { color: mahalFree ? '#10B981' : '#EF4444' }]}>{mahalFree ? 'Available' : 'Booked'}</Text>
-            <Text style={[styles.pillLabel, { color: colors.textMuted }]}>Mahal</Text>
+          <Animated.View entering={FadeInRight.delay(300)} style={[styles.statPill, { backgroundColor: hallsFree > 0 ? '#10B98110' : '#EF444410', borderColor: hallsFree > 0 ? '#10B98120' : '#EF444420' }]}>
+            <View style={[styles.miniPulse, { backgroundColor: hallsFree > 0 ? '#10B981' : '#EF4444' }]} />
+            <Text style={[styles.pillValue, { color: hallsFree > 0 ? '#10B981' : '#EF4444' }]}>{hallsBooked}/{totalHalls}</Text>
+            <Text style={[styles.pillLabel, { color: colors.textMuted }]}>{t("halls")}</Text>
           </Animated.View>
 
           <Animated.View entering={FadeInRight.delay(400)} style={[styles.statPill, { backgroundColor: '#3B82F610', borderColor: '#3B82F620' }]}>
             <Feather name="home" size={14} color="#3B82F6" />
-            <Text style={[styles.pillValue, { color: '#3B82F6' }]}>{roomsFree}/3 Free</Text>
-            <Text style={[styles.pillLabel, { color: colors.textMuted }]}>Rooms</Text>
+            <Text style={[styles.pillValue, { color: '#3B82F6' }]}>{roomsBooked}/{totalRooms} {t("booked")}</Text>
+            <Text style={[styles.pillLabel, { color: colors.textMuted }]}>{t("rooms")}</Text>
           </Animated.View>
 
           <Animated.View entering={FadeInRight.delay(500)} style={[styles.statPill, { backgroundColor: colors.textMuted + '10', borderColor: colors.textMuted + '20' }]}>
             <Feather name="check-circle" size={14} color={colors.textSecondary} />
             <Text style={[styles.pillValue, { color: colors.textSecondary }]}>{totalToday} Total</Text>
-            <Text style={[styles.pillLabel, { color: colors.textMuted }]}>Bookings</Text>
+            <Text style={[styles.pillLabel, { color: colors.textMuted }]}>{t("bookings")}</Text>
           </Animated.View>
         </ScrollView>
+        {activeVenues.length === 0 ? (
+          <View style={[styles.emptyFeed, { marginTop: 20 }]}>
+            <Text style={[styles.emptyText, { color: colors.textSecondary, textAlign: "center" }]}>{t("noVenues")}</Text>
+            <AnimatedButton
+              onPress={() => router.push("/manage-venues")}
+              style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
+            >
+              <Text style={styles.emptyBtnText}>{t("addVenue")}</Text>
+            </AnimatedButton>
+          </View>
+        ) : null}
 
         {/* Smart Search */}
         <Animated.View entering={FadeInDown.delay(600).springify()} style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -227,7 +242,21 @@ export default function HomeScreen() {
           </View>
 
           {isLoading ? (
-            <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
+            <View style={{ marginTop: 20, gap: 16 }}>
+              {[1, 2, 3].map((i) => (
+                <View key={i} style={{ flexDirection: "row", gap: 12, padding: 16, backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border }}>
+                  <Skeleton width={50} height={50} borderRadius={25} />
+                  <View style={{ flex: 1, gap: 8, justifyContent: "center" }}>
+                    <Skeleton width="60%" height={16} />
+                    <Skeleton width="40%" height={12} />
+                  </View>
+                  <View style={{ gap: 8, alignItems: "flex-end", justifyContent: "center" }}>
+                    <Skeleton width={40} height={14} />
+                    <Skeleton width={30} height={12} />
+                  </View>
+                </View>
+              ))}
+            </View>
           ) : todayBookings.length === 0 && !search && upcomingBookings.length === 0 && pastBookings.length === 0 ? (
             <Animated.View entering={FadeInDown} style={styles.emptyFeed}>
               <View style={[styles.emptyIconCircle, { backgroundColor: colors.border + '30' }]}>

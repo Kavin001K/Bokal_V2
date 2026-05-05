@@ -1,4 +1,4 @@
-import { AnimatedButton } from "@/components/AnimatedButton";
+import { Button } from "@/components/Button";
 import { Text, TextInput } from "@/components/Typography";
 import { Feather } from "@expo/vector-icons";
 import { useLogin } from "@workspace/api-client-react";
@@ -7,7 +7,6 @@ import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
   Platform,
@@ -19,65 +18,21 @@ import {
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 
 const nativeDriver = Platform.OS !== "web";
 
-function TempleIcon({ size = 64 }: { size?: number }) {
-  // A custom temple/venue icon built from View components
-  const s = size;
-  return (
-    <View style={{ width: s, height: s, alignItems: "center", justifyContent: "center" }}>
-      {/* Dome */}
-      <View style={{
-        width: s * 0.35,
-        height: s * 0.2,
-        borderTopLeftRadius: s * 0.2,
-        borderTopRightRadius: s * 0.2,
-        backgroundColor: "rgba(255,255,255,0.95)",
-        marginBottom: -1,
-      }} />
-      {/* Kalasam (finial) */}
-      <View style={{
-        position: "absolute",
-        top: s * 0.02,
-        width: s * 0.08,
-        height: s * 0.12,
-        backgroundColor: "#FFD700",
-        borderRadius: s * 0.04,
-      }} />
-      {/* Main body */}
-      <View style={{
-        width: s * 0.55,
-        height: s * 0.3,
-        backgroundColor: "rgba(255,255,255,0.9)",
-        borderTopLeftRadius: 4,
-        borderTopRightRadius: 4,
-      }} />
-      {/* Pillars */}
-      <View style={{ flexDirection: "row", gap: s * 0.12, marginTop: -1 }}>
-        <View style={{ width: s * 0.07, height: s * 0.22, backgroundColor: "rgba(255,255,255,0.85)", borderRadius: 2 }} />
-        <View style={{ width: s * 0.07, height: s * 0.22, backgroundColor: "rgba(255,255,255,0.85)", borderRadius: 2 }} />
-        <View style={{ width: s * 0.07, height: s * 0.22, backgroundColor: "rgba(255,255,255,0.85)", borderRadius: 2 }} />
-      </View>
-      {/* Base */}
-      <View style={{
-        width: s * 0.65,
-        height: s * 0.06,
-        backgroundColor: "rgba(255,255,255,0.8)",
-        borderRadius: 2,
-        marginTop: -1,
-      }} />
-    </View>
-  );
-}
+import { AnimatedLock } from "@/components/AnimatedLock";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [postLoginData, setPostLoginData] = useState<any | null>(null);
 
   // Entrance animations
   const isWeb = Platform.OS === "web";
@@ -111,14 +66,24 @@ export default function LoginScreen() {
   const loginMutation = useLogin({
     mutation: {
       onSuccess: async (data) => {
-        await login(data.token, data.user);
-        router.replace("/(tabs)");
+        if (!language) {
+          setPostLoginData(data);
+          return;
+        }
+        await login(data.token, data.user, (data as any).refreshToken);
+        if (data.user.mustChangePw) {
+          router.replace("/change-password");
+        } else {
+          router.replace("/(tabs)");
+        }
       },
       onError: (err: any) => {
         const msg = err.message || "";
         const targetUrl = err.url || "unknown URL";
         if (msg.includes("Failed to fetch") || msg.includes("Network request failed")) {
           setError(`Network error: Unable to connect to ${targetUrl}. Check your internet.`);
+        } else if (msg.includes("aborted") || err.name === "AbortError") {
+          setError("Connection timed out. Server may be unreachable. Please try again.");
         } else {
           setError(err?.data?.message || err.message || "An unexpected error occurred");
         }
@@ -133,6 +98,17 @@ export default function LoginScreen() {
       return;
     }
     loginMutation.mutate({ data: { email: email.trim().toLowerCase(), password } });
+  };
+
+  const handleLanguageChoice = async (selected: "en" | "ta") => {
+    if (!postLoginData) return;
+    await setLanguage(selected);
+    await login(postLoginData.token, postLoginData.user, (postLoginData as any).refreshToken);
+    if (postLoginData.user.mustChangePw) {
+      router.replace("/change-password");
+    } else {
+      router.replace("/(tabs)");
+    }
   };
 
   return (
@@ -162,7 +138,7 @@ export default function LoginScreen() {
               end={{ x: 1, y: 1 }}
               style={styles.logoCircle}
             >
-              <TempleIcon size={52} />
+              <AnimatedLock size={52} color="#FFFFFF" />
             </LinearGradient>
             <Text style={styles.appName}>Bookal</Text>
             <Text style={styles.tagline}>Venue Booking Made Simple</Text>
@@ -226,31 +202,29 @@ export default function LoginScreen() {
               </Animated.View>
             ) : null}
 
-            <AnimatedButton
-            style={styles.loginBtn}
-            onPress={handleLogin}
-            disabled={loginMutation.isPending}
-            scaleTo={0.96}
-          >
-            <LinearGradient
-              colors={loginMutation.isPending ? ["#A89080", "#A89080"] : ["#C75B2A", "#A64920"]}
-              style={styles.loginGradient}
-            >
-              {loginMutation.isPending ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <View style={styles.loginBtnContent}>
-                  <Feather name="log-in" size={18} color="#fff" />
-                  <Text style={styles.loginBtnText}>Sign In</Text>
-                </View>
-              )}
-            </LinearGradient>
-          </AnimatedButton>
+            <Button
+              style={styles.loginBtn}
+              label="Sign In"
+              icon="log-in"
+              loading={loginMutation.isPending}
+              onPress={handleLogin}
+              variant="primary"
+            />
           </Animated.View>
 
           <Text style={styles.version}>Bookal v1.0</Text>
         </ScrollView>
       </KeyboardAvoidingView>
+      {postLoginData ? (
+        <View style={styles.overlay}>
+          <View style={styles.langCard}>
+            <Text style={styles.welcomeText}>{t("selectLanguage")}</Text>
+            <Button label={t("english")} onPress={() => handleLanguageChoice("en")} variant="secondary" />
+            <View style={{ height: 10 }} />
+            <Button label={t("tamil")} onPress={() => handleLanguageChoice("ta")} variant="primary" />
+          </View>
+        </View>
+      ) : null}
     </LinearGradient>
   );
 }
@@ -352,25 +326,7 @@ const styles = StyleSheet.create({
   loginBtn: {
     marginTop: 8,
     borderRadius: 16,
-    overflow: "hidden",
-    boxShadow: '0px 8px 16px rgba(199, 91, 42, 0.35)',
-    elevation: 8,
-  },
-  loginGradient: {
-    height: 56,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loginBtnContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  loginBtnText: {
-    fontSize: 16,
-    fontWeight: "700" as const,
-    color: "#fff",
-    letterSpacing: 0.3,
+    overflow: "visible",
   },
   hintBox: {
     flexDirection: "row",
@@ -388,5 +344,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#A89080",
     fontWeight: "500" as const,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  langCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
   },
 });

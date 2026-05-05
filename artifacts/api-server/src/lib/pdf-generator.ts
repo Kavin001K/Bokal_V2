@@ -2,7 +2,9 @@
  * Professional PDF Generator for Bookal using pdf-lib.
  * Generates a branded, high-fidelity receipt and terms & conditions.
  */
-import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, RGB, degrees } from "pdf-lib";
+import { readFile } from "node:fs/promises";
+import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, degrees } from "pdf-lib";
 
 export interface BusinessInfo {
   name: string;
@@ -65,10 +67,27 @@ const HEIGHT = 841.89; // A4 Height
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
 
-function cleanText(text: string | null | undefined): string {
+function cleanText(text: string | null | undefined, preserveUnicode = false): string {
   if (!text) return "";
-  // More inclusive ASCII range but still safe for standard fonts
-  return text.toString().replace(/[^\x20-\x7E\s]/g, "");
+  const normalized = text.toString().trim();
+  if (preserveUnicode) return normalized;
+  return normalized.replace(/[^\x20-\x7E\s]/g, "");
+}
+
+function hasTamil(text: string | null | undefined): boolean {
+  return !!text && /[\u0B80-\u0BFF]/.test(text);
+}
+
+async function loadTamilFontIfConfigured(pdfDoc: PDFDocument): Promise<PDFFont | null> {
+  const tamilFontPath = process.env.PDF_TAMIL_FONT_PATH;
+  if (!tamilFontPath) return null;
+  try {
+    const fontBytes = await readFile(tamilFontPath);
+    pdfDoc.registerFontkit(fontkit);
+    return await pdfDoc.embedFont(fontBytes);
+  } catch {
+    return null;
+  }
 }
 
 function wrapText(text: string, maxWidth: number, font: PDFFont, fontSize: number): string[] {
@@ -153,8 +172,17 @@ function drawSectionHeader(page: PDFPage, text: string, icon: string, x: number,
 export async function generateBookingConfirmationPdf(data: BookingPdfData): Promise<Uint8Array> {
   try {
     const pdfDoc = await PDFDocument.create();
+    const tamilFont = await loadTamilFontIfConfigured(pdfDoc);
     const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const supportsTamilText = !!tamilFont;
+    const bodyFont = tamilFont && (
+      hasTamil(data.customerName) ||
+      hasTamil(data.address) ||
+      hasTamil(data.tamilDate) ||
+      hasTamil(data.notes) ||
+      data.venues.some((v) => hasTamil(v.name))
+    ) ? tamilFont : regular;
 
     const biz = data.business || {
       name: "BOOKAL",
@@ -208,15 +236,15 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
       p.drawText("B", { x: logoX - 8, y: logoY - 8, size: 24, font: bold, color: COLORS.WHITE });
 
       // Brand Name
-      p.drawText(cleanText(biz.name), { x: logoX + 55, y: HEIGHT - 90, size: 42, font: bold, color: COLORS.WHITE });
-      p.drawText(cleanText(biz.tagline), { x: logoX + 58, y: HEIGHT - 110, size: 14, font: regular, color: COLORS.WHITE });
+      p.drawText(cleanText(biz.name, supportsTamilText), { x: logoX + 55, y: HEIGHT - 90, size: 42, font: bold, color: COLORS.WHITE });
+      p.drawText(cleanText(biz.tagline, supportsTamilText), { x: logoX + 58, y: HEIGHT - 110, size: 14, font: bodyFont, color: COLORS.WHITE });
 
       // Business Details (Right)
       let bizY = HEIGHT - 50;
       const drawBizInfo = (text: string, icon: string) => {
         if (!text) return;
         drawIcon(p, icon, WIDTH - 220, bizY + 4, 11, COLORS.ACCENT);
-        p.drawText(cleanText(text), { x: WIDTH - 205, y: bizY, size: 9.5, font: regular, color: COLORS.WHITE });
+        p.drawText(cleanText(text, supportsTamilText), { x: WIDTH - 205, y: bizY, size: 9.5, font: bodyFont, color: COLORS.WHITE });
         bizY -= 18;
       };
       drawBizInfo(biz.address, "pin");
@@ -312,16 +340,16 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
     let cardY = y - 40;
     const drawRow = (p: PDFPage, label: string, val: string, lx: number, rx: number) => {
       p.drawText(label, { x: lx, y: cardY, size: 10, font: regular, color: COLORS.TEXT_MUTED });
-      p.drawText(cleanText(val), { x: rx, y: cardY, size: 10.5, font: bold, color: COLORS.TEXT_DARK });
+      p.drawText(cleanText(val, supportsTamilText), { x: rx, y: cardY, size: 10.5, font: bodyFont, color: COLORS.TEXT_DARK });
       cardY -= 22;
     };
     
     drawRow(page, "Name", data.customerName, MARGIN + 25, MARGIN + 85);
     drawRow(page, "Phone", data.phones, MARGIN + 25, MARGIN + 85);
     page.drawText("Address", { x: MARGIN + 25, y: cardY, size: 10, font: regular, color: COLORS.TEXT_MUTED });
-    const addrLines = wrapText(data.address, colW - 95, regular, 10);
+    const addrLines = wrapText(data.address, colW - 95, bodyFont, 10);
     addrLines.slice(0, 3).forEach((l, i) => {
-      page.drawText(cleanText(l), { x: MARGIN + 85, y: cardY - (i * 14), size: 10, font: bold, color: COLORS.TEXT_DARK });
+      page.drawText(cleanText(l, supportsTamilText), { x: MARGIN + 85, y: cardY - (i * 14), size: 10, font: bodyFont, color: COLORS.TEXT_DARK });
     });
 
     // Card 2: Schedule
@@ -365,7 +393,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
       if (i % 2 === 1) {
         page.drawRectangle({ x: MARGIN + 5, y: y - 8, width: WIDTH - MARGIN * 2 - 10, height: 22, color: COLORS.BG_LIGHT, opacity: 0.5 });
       }
-      page.drawText(cleanText(v.name), { x: MARGIN + 15, y, size: 11, font: regular, color: COLORS.TEXT_DARK });
+      page.drawText(cleanText(v.name, supportsTamilText), { x: MARGIN + 15, y, size: 11, font: bodyFont, color: COLORS.TEXT_DARK });
       const pText = `Rs. ${v.price}`;
       const pw = bold.widthOfTextAtSize(pText, 11);
       page.drawText(pText, { x: WIDTH - MARGIN - pw - 15, y, size: 11, font: bold, color: COLORS.TEXT_DARK });
@@ -387,7 +415,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
       
       drawSectionHeader(page, "SPECIAL INSTRUCTIONS", "document", MARGIN, y + 5, bold);
       y -= 25;
-      const notesLines = wrapText(data.notes, WIDTH - MARGIN * 2 - 40, regular, 10);
+      const notesLines = wrapText(data.notes, WIDTH - MARGIN * 2 - 40, bodyFont, 10);
       notesLines.forEach(line => {
         // Handle page overflow within notes
         if (y < 120) {
@@ -397,7 +425,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
           drawWatermark(page);
           y = HEIGHT - 190;
         }
-        page.drawText(cleanText(line), { x: MARGIN + 35, y, size: 10, font: regular, color: COLORS.TEXT_MUTED });
+        page.drawText(cleanText(line, supportsTamilText), { x: MARGIN + 35, y, size: 10, font: bodyFont, color: COLORS.TEXT_MUTED });
         y -= 15;
       });
       y -= 10;

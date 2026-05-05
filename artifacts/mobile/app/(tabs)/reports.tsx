@@ -14,8 +14,10 @@ import { ActivityIndicator,
   View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BookingCard from "@/components/BookingCard";
+import { Skeleton } from "@/components/Skeleton";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import { getApiBaseUrl } from "@/lib/apiBaseUrl";
 
 function getDateRange(preset: string, customFrom?: string, customTo?: string): { from: string; to: string } {
   const now = new Date();
@@ -118,9 +120,7 @@ export default function ReportsScreen() {
   const exportToPDF = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const domain = process.env["EXPO_PUBLIC_DOMAIN"] || "bookal.onrender.com";
-      const isLocal = domain.includes("localhost") || domain.includes("127.0.0.1") || domain.includes("192.168.") || domain.includes("10.0.");
-      const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
+      const baseUrl = getApiBaseUrl();
       
       const pdfUrl = `${baseUrl}/api/reports/pdf?from=${from}&to=${to}&token=${token}`;
       
@@ -212,7 +212,18 @@ export default function ReportsScreen() {
         </View>
 
         {summaryLoading ? (
-          <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
+          <View style={{ marginTop: 32, gap: 16 }}>
+            <View style={styles.statsGrid}>
+              {[1, 2, 3, 4].map((i) => (
+                <View key={i} style={[styles.statCard, { padding: 0, overflow: 'hidden' }]}>
+                  <Skeleton width="100%" height={90} borderRadius={14} />
+                </View>
+              ))}
+            </View>
+            <View style={[styles.section, { padding: 0, overflow: 'hidden' }]}>
+               <Skeleton width="100%" height={150} borderRadius={14} />
+            </View>
+          </View>
         ) : summary ? (
           <>
             <View style={styles.statsGrid}>

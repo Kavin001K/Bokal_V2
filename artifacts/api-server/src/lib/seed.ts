@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { usersTable, venuesTable, settingsTable } from "@workspace/db/schema";
 import { logger } from "./logger.js";
@@ -18,15 +18,21 @@ export async function seedIfEmpty() {
     if (adminUser.length === 0) {
       logger.info("No admin user found, seeding...");
       const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 12);
-      await db.insert(usersTable).values({
+      const [newAdmin] = await db.insert(usersTable).values({
         fullName: "Admin",
         email: DEFAULT_ADMIN_EMAIL,
         passwordHash,
         role: "admin",
         isActive: true,
         mustChangePw: false,
-      });
-      logger.info("Admin user created");
+      }).returning();
+      
+      // Update adminId to point to self
+      await db.update(usersTable)
+        .set({ adminId: newAdmin!.id })
+        .where(eq(usersTable.id, newAdmin!.id));
+        
+      logger.info("Admin user created and self-linked");
     } else {
       if (!adminUser[0]!.isActive) {
         logger.warn("Admin user exists but is inactive, activating...");
@@ -49,13 +55,28 @@ export async function seedIfEmpty() {
       logger.info({ email: DEFAULT_ADMIN_EMAIL }, "Admin user already exists");
     }
 
-    const existingVenues = await db.select().from(venuesTable).limit(1);
+    // Refresh adminUser to get ID for linking
+    const currentAdmin = await db.select().from(usersTable).where(eq(usersTable.email, DEFAULT_ADMIN_EMAIL)).limit(1);
+    const adminId = currentAdmin[0]!.id;
+    
+    // Ensure the existing admin has adminId set to self if it was null
+    if (!currentAdmin[0]!.adminId || currentAdmin[0]!.adminId !== adminId) {
+      logger.info({ email: DEFAULT_ADMIN_EMAIL }, "Fixing Admin self-link...");
+      await db.update(usersTable).set({ adminId }).where(eq(usersTable.id, adminId));
+    }
+
+    // CRITICAL: Ensure all existing venues HAVE an adminId
+    await db.update(venuesTable)
+      .set({ adminId })
+      .where(and(eq(venuesTable.adminId, null as any)));
+
+    const existingVenues = await db.select().from(venuesTable).limit(1).catch(() => []);
     if (existingVenues.length === 0) {
       await db.insert(venuesTable).values([
-        { name: "Mahal", type: "mahal", pricePerHour: "2000", isActive: true, displayOrder: 1 },
-        { name: "AC Room 1", type: "room", pricePerHour: "500", isActive: true, displayOrder: 2 },
-        { name: "AC Room 2", type: "room", pricePerHour: "500", isActive: true, displayOrder: 3 },
-        { name: "AC Room 3", type: "room", pricePerHour: "500", isActive: true, displayOrder: 4 },
+        { name: "Mahal", type: "mahal", pricePerHour: "2000", isActive: true, displayOrder: 1, adminId },
+        { name: "AC Room 1", type: "room", pricePerHour: "500", isActive: true, displayOrder: 2, adminId },
+        { name: "AC Room 2", type: "room", pricePerHour: "500", isActive: true, displayOrder: 3, adminId },
+        { name: "AC Room 3", type: "room", pricePerHour: "500", isActive: true, displayOrder: 4, adminId },
       ]);
       logger.info("Venues seeded");
     }
@@ -76,10 +97,10 @@ export async function seedIfEmpty() {
       const existing = await db
         .select()
         .from(settingsTable)
-        .where(eq(settingsTable.key, setting.key))
+        .where(and(eq(settingsTable.key, setting.key), eq(settingsTable.adminId, adminId)))
         .limit(1);
       if (existing.length === 0) {
-        await db.insert(settingsTable).values(setting);
+        await db.insert(settingsTable).values({ ...setting, adminId });
       }
     }
 

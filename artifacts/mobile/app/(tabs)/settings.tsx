@@ -23,13 +23,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { AppAlertModal } from "@/components/AppAlertModal";
+import { useLanguage } from "@/context/LanguageContext";
+import { getApiBaseUrl } from "@/lib/apiBaseUrl";
 
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { logout, token } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
 
-  const { data: venues, refetch: refetchVenues } = useGetVenues({ query: { queryKey: ["venues"] } });
+  const { refetch: refetchVenues } = useGetVenues({ query: { queryKey: ["venues"], enabled: false } });
   const { data: settingsData, refetch: refetchSettings } = useGetSettings({ query: { queryKey: ["settings"] } });
   const { data: users } = useGetUsers({ query: { queryKey: ["users"] } });
 
@@ -40,19 +43,9 @@ export default function SettingsScreen() {
     message: '',
   });
 
-  const updateVenueMutation = useUpdateVenuePrice({
-    mutation: {
-      onSuccess: () => { 
-        refetchVenues(); 
-        setAlert({ visible: true, type: 'success', title: 'Price Updated', message: 'The venue pricing has been updated successfully.' });
-      },
-      onError: (err: any) => {
-        setAlert({ visible: true, type: 'error', title: 'Update Failed', message: err.message || 'Could not update the price.' });
-      }
-    },
-  });
+  // const updateVenueMutation = ... (removed)
 
-  const [localPrices, setLocalPrices] = useState<Record<string, string>>({});
+  // const [localPrices, setLocalPrices] = useState<Record<string, string>>({});
   const [bizForm, setBizForm] = useState({
     biz_name: "",
     biz_tagline: "",
@@ -78,12 +71,6 @@ export default function SettingsScreen() {
       });
     }
   }, [settingsData]);
-
-  const getBaseUrl = () => {
-    const domain = process.env["EXPO_PUBLIC_DOMAIN"];
-    const isLocal = domain?.includes("localhost") || domain?.includes("127.0.0.1") || domain?.includes("192.168.") || domain?.includes("10.0.");
-    return domain ? `${isLocal ? "http" : "https"}://${domain}` : "https://bookal.onrender.com";
-  };
 
   const handleUploadRulesPdf = async () => {
     try {
@@ -111,7 +98,7 @@ export default function SettingsScreen() {
         reader.readAsDataURL(blob);
       });
 
-      const res = await fetch(`${getBaseUrl()}/api/settings/rules-pdf`, {
+      const res = await fetch(`${getApiBaseUrl()}/api/settings/rules-pdf`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -136,7 +123,7 @@ export default function SettingsScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setIsSavingBiz(true);
       
-      const res = await fetch(`${getBaseUrl()}/api/settings`, {
+      const res = await fetch(`${getApiBaseUrl()}/api/settings`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -169,7 +156,7 @@ export default function SettingsScreen() {
   const handlePreviewPdf = async () => {
     try {
       setIsPreviewing(true);
-      const pdfUrl = `${getBaseUrl()}/api/settings/rules-pdf`;
+      const pdfUrl = `${getApiBaseUrl()}/api/settings/rules-pdf`;
       
       await WebBrowser.openBrowserAsync(pdfUrl, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
@@ -186,40 +173,37 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Settings</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>{t("settings")}</Text>
+
+        <SectionHeader title={t("selectLanguage")} icon="globe" colors={colors} />
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.rulesActions}>
+            <Pressable
+              style={[styles.rulesBtn, { backgroundColor: language === "en" ? colors.primary : colors.secondary }]}
+              onPress={() => setLanguage("en")}
+            >
+              <Text style={[styles.rulesBtnText, { color: language === "en" ? "#fff" : colors.textSecondary }]}>{t("english")}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.rulesBtn, { backgroundColor: language === "ta" ? colors.primary : colors.secondary }]}
+              onPress={() => setLanguage("ta")}
+            >
+              <Text style={[styles.rulesBtnText, { color: language === "ta" ? "#fff" : colors.textSecondary }]}>{t("tamil")}</Text>
+            </Pressable>
+          </View>
+        </View>
 
         <SectionHeader title="Venue Pricing" icon="dollar-sign" colors={colors} />
-        {venues?.map((venue) => {
-          const currentPrice = localPrices[venue.id] ?? String(venue.pricePerHour);
-          return (
-            <View key={venue.id} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.venueRow}>
-                <View style={styles.venueInfo}>
-                  <Text style={[styles.venueName, { color: colors.textPrimary }]}>{venue.name}</Text>
-                  <Text style={[styles.venueType, { color: colors.textSecondary }]}>{venue.type}</Text>
-                </View>
-                <View style={styles.priceEdit}>
-                  <Text style={[styles.currency, { color: colors.textSecondary }]}>₹</Text>
-                  <TextInput
-                    style={[styles.priceInput, { color: colors.textPrimary }]}
-                    value={currentPrice}
-                    onChangeText={(t) => setLocalPrices({ ...localPrices, [venue.id]: t })}
-                    keyboardType="number-pad"
-                  />
-                  <AnimatedButton
-                    style={[styles.saveMiniBtn, { backgroundColor: colors.primary }]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      updateVenueMutation.mutate({ id: venue.id, data: { pricePerHour: Number(currentPrice) } });
-                    }}
-                  >
-                    <Text style={styles.saveMiniBtnText}>Save</Text>
-                  </AnimatedButton>
-                </View>
-              </View>
-            </View>
-          );
-        })}
+        <AnimatedButton
+          style={[styles.card, styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: 16 }]}
+          onPress={() => router.push("/manage-venues")}
+        >
+          <View style={styles.menuContent}>
+            <Feather name="plus-square" size={20} color={colors.primary} />
+            <Text style={[styles.menuText, { color: colors.textPrimary }]}>Manage Venues & Amenities</Text>
+          </View>
+          <Feather name="chevron-right" size={20} color={colors.textMuted} />
+        </AnimatedButton>
 
         <SectionHeader title="Business Information" icon="briefcase" colors={colors} />
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>

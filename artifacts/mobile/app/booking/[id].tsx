@@ -1,13 +1,15 @@
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
+import { BlurView } from "expo-blur";
 import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useCallback, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
+  Animated,
   Linking,
   Modal,
   Platform,
@@ -15,25 +17,22 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
+import { getApiBaseUrl } from "@/lib/apiBaseUrl";
+import { Button } from "@/components/Button";
+import { Text, TextInput } from "@/components/Typography";
 import { useGetBooking, useCancelBooking } from "@workspace/api-client-react";
-
-// Helper to clean text for PDF
-function cleanText(val: any): string {
-  if (val === null || val === undefined) return "";
-  return String(val).replace(/[^\x20-\x7E]/g, "").trim();
-}
 
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
+  const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const queryClient = useQueryClient();
@@ -44,6 +43,8 @@ export default function BookingDetailScreen() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
+
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const onRefresh = useCallback(() => {
     refetch();
@@ -69,10 +70,12 @@ export default function BookingDetailScreen() {
 
   const isFuture = new Date(booking.bookingDate) >= new Date();
   const canCancel = booking.status === "confirmed" && isFuture;
+  const isPaid = booking.isPaid;
+  const isCancelled = booking.status === "cancelled";
 
   const handleCancelBooking = () => {
     if (!cancelReason.trim()) {
-      Alert.alert("Error", "Please provide a reason for cancellation");
+      Alert.alert("Error", t("requiredReason"));
       return;
     }
     cancelMutation.mutate({ id: id!, data: { reason: cancelReason } });
@@ -83,28 +86,15 @@ export default function BookingDetailScreen() {
       setDownloadingPdf(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      const envDomain = process.env["EXPO_PUBLIC_DOMAIN"] || "bookal.onrender.com";
-      let domain = envDomain;
-      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-        domain = domain.replace('127.0.0.1', 'localhost');
-      }
-      
-      const isLocal = domain.includes("localhost") || domain.includes("127.0.0.1") || domain.includes("192.168.");
-      const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
-      
-
+      const baseUrl = getApiBaseUrl();
       
       const pdfUrl = `${baseUrl}/api/bookings/${booking.id}/pdf?token=${token}`;
       
       await WebBrowser.openBrowserAsync(pdfUrl, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-        controlsColor: colors.primary,
-        toolbarColor: colors.background,
       });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       console.error("PDF Download Error:", err);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setDownloadingPdf(false);
     }
@@ -115,16 +105,7 @@ export default function BookingDetailScreen() {
       setMarkingPaid(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      const envDomain = process.env["EXPO_PUBLIC_DOMAIN"] || "bookal.onrender.com";
-      let domain = envDomain;
-      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-        domain = domain.replace('127.0.0.1', 'localhost');
-      }
-      
-      const isLocal = domain.includes("localhost") || domain.includes("127.0.0.1") || domain.includes("192.168.");
-      const baseUrl = `${isLocal ? "http" : "https"}://${domain}`;
-      
-
+      const baseUrl = getApiBaseUrl();
       
       const response = await fetch(`${baseUrl}/api/bookings/${booking.id}/pay`, {
         method: "POST",
@@ -135,38 +116,25 @@ export default function BookingDetailScreen() {
       });
       
       const result = await response.json();
-      
-      if (response.ok && (result.success || result.id)) {
+      if (response.ok) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         refetch();
       } else {
         throw new Error(result.message || "Failed to mark as paid");
       }
     } catch (err: any) {
-      console.error("[Payment] Error:", err);
       Alert.alert("Payment Error", err.message || "Could not connect to server.");
     } finally {
       setMarkingPaid(false);
     }
   };
 
-  const handleCall = (phone: string) => {
-    if (!phone) return;
-    Linking.openURL(`tel:${phone.replace(/\s/g, "")}`);
-  };
-
   const formatEnglishDate = (dateStr: string) => {
     try {
-      const date = new Date(dateStr);
       return new Intl.DateTimeFormat('en-IN', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      }).format(date);
-    } catch {
-      return dateStr;
-    }
+        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+      }).format(new Date(dateStr));
+    } catch { return dateStr; }
   };
 
   const formatTime = (timeStr: string) => {
@@ -174,318 +142,216 @@ export default function BookingDetailScreen() {
       const [h, m] = timeStr.split(":");
       const date = new Date();
       date.setHours(parseInt(h!), parseInt(m!), 0, 0);
-      return new Intl.DateTimeFormat('en-IN', {
-        hour: 'numeric',
-        minute: 'numeric',
-        hour12: true
-      }).format(date);
-    } catch {
-      return timeStr;
-    }
+      return new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: 'numeric', hour12: true }).format(date);
+    } catch { return timeStr; }
   };
+
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 50],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <Pressable 
-          onPress={() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace("/(tabs)/reports");
-            }
-          }} 
-          hitSlop={8}
-        >
-          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-          {booking.bookingRef}
-        </Text>
-        <Pressable hitSlop={8}>
-          <Feather name="share-2" size={20} color={colors.primary} />
-        </Pressable>
-      </View>
+      <Animated.View style={[styles.header, { paddingTop: insets.top, opacity: headerOpacity, zIndex: 10 }]}>
+        <BlurView intensity={80} style={StyleSheet.absoluteFill} tint="light" />
+        <View style={styles.headerInner}>
+          <Pressable onPress={() => router.back()} style={styles.iconBtn}>
+            <Feather name="arrow-left" size={22} color={colors.textPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>{booking.bookingRef}</Text>
+          <View style={{ width: 40 }} />
+        </View>
+      </Animated.View>
 
-      <ScrollView 
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+      <Animated.ScrollView 
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 120 }]}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border, boxShadow: '0px 2px 8px rgba(0,0,0,0.05)' }]}>
-          <View style={styles.sectionHeader}>
-            <Feather name="user" size={16} color={colors.primary} />
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Customer Details</Text>
+        <LinearGradient
+          colors={isCancelled ? ["#FEE2E2", "#FECACA"] : isPaid ? ["#ECFDF5", "#D1FAE5"] : ["#FFF7ED", "#FFEDD5"]}
+          style={styles.heroCard}
+        >
+          <View style={styles.heroTop}>
+            <View>
+              <Text style={styles.heroRef}>{booking.bookingRef}</Text>
+              <Text style={styles.heroDate}>{formatEnglishDate(booking.bookingDate)}</Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: isCancelled ? "#EF4444" : isPaid ? "#10B981" : "#F59E0B" }]}>
+              <Text style={styles.statusText}>{isCancelled ? t("cancelled") : isPaid ? t("paid") : t("pending")}</Text>
+            </View>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>Name</Text>
-            <Text style={[styles.value, { color: colors.textPrimary }]}>{booking.customerName}</Text>
+          
+          <View style={styles.heroAmount}>
+            <Text style={styles.amountLabel}>{t("totalAmount")}</Text>
+            <Text style={styles.amountValue}>₹{Number(booking.totalAmount).toLocaleString("en-IN")}</Text>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>Phone</Text>
-            <View style={styles.phoneGroup}>
-              {booking.phoneNumbers?.map((p, i) => (
-                <Text key={i} style={[styles.value, { color: colors.textPrimary }]}>{p}{i < booking.phoneNumbers!.length - 1 ? ", " : ""}</Text>
+        </LinearGradient>
+
+        <View style={styles.actionRow}>
+          <Pressable onPress={handleDownloadReceipt} style={[styles.quickAction, { backgroundColor: colors.card }]}>
+            <View style={[styles.actionIcon, { backgroundColor: "#EFF6FF" }]}>
+              <Feather name="download" size={20} color="#3B82F6" />
+            </View>
+            <Text style={styles.actionLabel}>{t("receipt")}</Text>
+          </Pressable>
+          <Pressable style={[styles.quickAction, { backgroundColor: colors.card }]}>
+            <View style={[styles.actionIcon, { backgroundColor: "#F5F3FF" }]}>
+              <Feather name="share-2" size={20} color="#8B5CF6" />
+            </View>
+            <Text style={styles.actionLabel}>{t("share")}</Text>
+          </Pressable>
+          <Pressable onPress={() => Linking.openURL(`tel:${booking.phoneNumbers?.[0]}`)} style={[styles.quickAction, { backgroundColor: colors.card }]}>
+            <View style={[styles.actionIcon, { backgroundColor: "#ECFDF5" }]}>
+              <Feather name="phone" size={20} color="#10B981" />
+            </View>
+            <Text style={styles.actionLabel}>{t("call")}</Text>
+          </Pressable>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={styles.sectionTitle}>{t("customerInformation")}</Text>
+          <View style={styles.detailItem}>
+            <Feather name="user" size={16} color="#A89080" />
+            <View style={styles.detailText}>
+              <Text style={styles.detailLabel}>Client Name</Text>
+              <Text style={styles.detailValue}>{booking.customerName}</Text>
+            </View>
+          </View>
+          <View style={styles.detailItem}>
+            <Feather name="phone" size={16} color="#A89080" />
+            <View style={styles.detailText}>
+              <Text style={styles.detailLabel}>Contact Numbers</Text>
+              <Text style={styles.detailValue}>{booking.phoneNumbers?.join(", ")}</Text>
+            </View>
+          </View>
+          <View style={styles.detailItem}>
+            <Feather name="map-pin" size={16} color="#A89080" />
+            <View style={styles.detailText}>
+              <Text style={styles.detailLabel}>Address</Text>
+              <Text style={styles.detailValue}>{booking.address || "No address provided"}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={styles.sectionTitle}>{t("eventSchedule")}</Text>
+          <View style={styles.detailItem}>
+            <Feather name="clock" size={16} color="#A89080" />
+            <View style={styles.detailText}>
+              <Text style={styles.detailLabel}>Timing</Text>
+              <Text style={styles.detailValue}>{formatTime(booking.startTime)} – {formatTime(booking.endTime)}</Text>
+              <Text style={styles.detailSub}>{booking.durationHours} Hours Duration</Text>
+            </View>
+          </View>
+          <View style={styles.detailItem}>
+            <Feather name="home" size={16} color="#A89080" />
+            <View style={styles.detailText}>
+              <Text style={styles.detailLabel}>Selected Venues</Text>
+              {booking.venues?.map((v, i) => (
+                <Text key={i} style={styles.detailValue}>• {v.venueName}</Text>
               ))}
             </View>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>Address</Text>
-            <Text style={[styles.value, { color: colors.textPrimary }]}>{booking.address || "N/A"}</Text>
-          </View>
         </View>
 
-        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border, boxShadow: '0px 2px 8px rgba(0,0,0,0.05)' }]}>
-          <View style={styles.sectionHeader}>
-            <Feather name="calendar" size={16} color={colors.primary} />
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Booking Details</Text>
+        <View style={[styles.section, { backgroundColor: colors.card }]}>
+          <Text style={styles.sectionTitle}>{t("paymentSummary")}</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>{t("totalFees")}</Text>
+            <Text style={styles.priceValue}>₹{Number(booking.totalAmount).toLocaleString()}</Text>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>Date</Text>
-            <Text style={[styles.value, { color: colors.textPrimary }]}>{formatEnglishDate(booking.bookingDate)}</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>{t("advancePaid")}</Text>
+            <Text style={[styles.priceValue, { color: "#10B981" }]}>- ₹{Number(booking.advanceAmount).toLocaleString()}</Text>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>Tamil Date</Text>
-            <Text style={[styles.value, { color: colors.textPrimary }]}>{booking.tamilDateLabel || "N/A"}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>Time</Text>
-            <Text style={[styles.value, { color: colors.textPrimary }]}>{formatTime(booking.startTime)} - {formatTime(booking.endTime)}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>Duration</Text>
-            <Text style={[styles.value, { color: colors.textPrimary }]}>{booking.durationHours} hours</Text>
-          </View>
-        </View>
-
-        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border, boxShadow: '0px 2px 8px rgba(0,0,0,0.05)' }]}>
-          <View style={styles.sectionHeader}>
-            <Feather name="home" size={16} color={colors.primary} />
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Venue & Pricing</Text>
-          </View>
-          {booking.venues?.map((v, i) => (
-            <View key={i} style={styles.venueRow}>
-              <Text style={[styles.venueName, { color: colors.textPrimary }]}>{v.venueName} ({booking.durationHours}h × ₹{Number(v.pricePerHour).toLocaleString()})</Text>
-              <Text style={[styles.venuePrice, { color: colors.textPrimary }]}>₹{Number(v.subtotal).toLocaleString()}</Text>
-            </View>
-          ))}
           <View style={styles.divider} />
-          <View style={styles.totalRow}>
-            <Text style={[styles.totalLabel, { color: colors.textPrimary }]}>TOTAL</Text>
-            <Text style={[styles.totalValue, { color: colors.primary }]}>₹{Number(booking.totalAmount).toLocaleString("en-IN")}</Text>
-          </View>
-          <View style={styles.totalRow}>
-            <Text style={[styles.paymentLabel, { color: colors.textMuted }]}>Advance Paid</Text>
-            <Text style={[styles.paymentValue, { color: colors.success }]}>- ₹{Number(booking.advanceAmount || 0).toLocaleString("en-IN")}</Text>
-          </View>
-          <View style={styles.balanceRow}>
-            <Text style={[styles.balanceLabel, { color: colors.textPrimary }]}>BALANCE</Text>
-            <Text style={[styles.balanceValue, { color: colors.destructive }]}>
-              ₹{Number(booking.totalAmount - (booking.advanceAmount || 0)).toLocaleString("en-IN")}
+          <View style={styles.priceRow}>
+            <Text style={styles.balanceLabel}>{t("balanceDue")}</Text>
+            <Text style={[styles.balanceValue, { color: isPaid ? "#10B981" : "#EF4444" }]}>
+              ₹{Number(booking.totalAmount - (booking.advanceAmount || 0)).toLocaleString()}
             </Text>
           </View>
         </View>
+      </Animated.ScrollView>
 
-        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border, boxShadow: '0px 2px 8px rgba(0,0,0,0.05)' }]}>
-          <View style={styles.sectionHeader}>
-            <Feather name="user-check" size={16} color={colors.primary} />
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Created By</Text>
-          </View>
-          <Text style={[styles.value, { color: colors.textPrimary }]}>{booking.createdByName} • {formatEnglishDate(booking.createdAt)}</Text>
-        </View>
-      </ScrollView>
-
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 15, backgroundColor: colors.card, borderTopColor: colors.border }]}>
-        <Pressable 
-          style={[styles.callBtn, { backgroundColor: colors.primary }]}
-          onPress={() => handleCall(booking.phoneNumbers?.[0] || "")}
-        >
-          <Feather name="phone" size={18} color={WHITE} />
-          <Text style={styles.callBtnText}>Call Customer</Text>
-        </Pressable>
-        <Pressable 
-          style={[styles.pdfBtn, { backgroundColor: colors.primary + "15", borderColor: colors.primary }]}
-          onPress={handleDownloadReceipt}
-          disabled={downloadingPdf}
-        >
-          {downloadingPdf ? (
-            <ActivityIndicator color={colors.primary} size="small" />
-          ) : (
-            <Feather name="download" size={18} color={colors.primary} />
-          )}
-          <Text style={[styles.pdfBtnText, { color: colors.primary }]}>PDF</Text>
-        </Pressable>
+      <BlurView intensity={90} tint="light" style={[styles.bottomActions, { paddingBottom: insets.bottom + 20 }]}>
+        {!isPaid && !isCancelled && (
+          <Button
+            style={styles.mainBtn}
+            variant="primary"
+            label={t("markFullyPaid")}
+            icon="check-circle"
+            onPress={handleMarkPaid}
+            loading={markingPaid}
+          />
+        )}
         {canCancel && (
-          <Pressable 
-            style={[styles.cancelBtn, { backgroundColor: colors.destructive + "15", borderColor: colors.destructive }]}
+          <Button
+            style={[styles.mainBtn, { backgroundColor: "#FEE2E2", marginTop: 10 }]}
+            variant="ghost"
+            label={t("cancelBooking")}
+            icon="x-circle"
             onPress={() => setShowCancelModal(true)}
-          >
-            <Feather name="x-circle" size={18} color={colors.destructive} />
-          </Pressable>
+          />
         )}
-        {!booking.isPaid && booking.status !== "cancelled" && (
-          <Pressable
-            style={[styles.payBtn, { backgroundColor: colors.success + "15", borderColor: colors.success }]}
-            onPress={() => {
-              if (markingPaid) return;
-              
-              const title = "Mark as Paid";
-              const message = "Are you sure you want to mark this booking as fully paid?";
-              
-              if (Platform.OS === 'web') {
-                if (window.confirm(`${title}\n\n${message}`)) {
-                  handleMarkPaid();
-                }
-              } else {
-                Alert.alert(title, message, [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Yes, Paid", onPress: handleMarkPaid }
-                ]);
-              }
-            }}
-            disabled={markingPaid}
-          >
-            {markingPaid ? (
-              <ActivityIndicator size="small" color={colors.success} />
-            ) : (
-              <Feather name="dollar-sign" size={18} color={colors.success} />
-            )}
-          </Pressable>
-        )}
-      </View>
-
-      <Modal visible={showCancelModal} transparent animationType="fade" onRequestClose={() => setShowCancelModal(false)}>
-        <Pressable style={styles.overlay} onPress={() => setShowCancelModal(false)}>
-          <View
-            style={[styles.cancelModal, { backgroundColor: colors.card }]}
-            onStartShouldSetResponder={() => true}
-            onTouchEnd={(e) => e.stopPropagation()}
-          >
-            <Text style={[styles.cancelModalTitle, { color: colors.textPrimary }]}>Cancel Booking</Text>
-            <Text style={[styles.cancelModalSubtitle, { color: colors.textMuted }]}>
-              Please provide a reason for cancellation
-            </Text>
-            <TextInput
-              style={[styles.cancelInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.textPrimary }]}
-              placeholder="Reason for cancellation..."
-              placeholderTextColor={colors.textMuted}
-              value={cancelReason}
-              onChangeText={setCancelReason}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <Pressable 
-                style={[styles.modalBtn, { backgroundColor: colors.background }]} 
-                onPress={() => setShowCancelModal(false)}
-              >
-                <Text style={[styles.modalBtnText, { color: colors.textPrimary }]}>Keep Booking</Text>
-              </Pressable>
-              <Pressable 
-                style={[styles.modalBtn, { backgroundColor: colors.destructive }]} 
-                onPress={handleCancelBooking}
-              >
-                <Text style={[styles.modalBtnText, { color: WHITE }]}>Cancel Now</Text>
-              </Pressable>
+      </BlurView>
+      <Modal visible={showCancelModal} transparent animationType="fade">
+         <View style={{flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20}}>
+            <View style={{backgroundColor: 'white', padding: 20, borderRadius: 20}}>
+               <Text style={{fontSize: 18, fontWeight: "700", color: colors.textPrimary}}>{t("cancelBooking")}</Text>
+               <TextInput
+                 style={{height: 100, borderWidth: 1, borderColor: "#ddd", borderRadius: 10, marginVertical: 15, padding: 10, color: colors.textPrimary, textAlignVertical: "top"}}
+                 value={cancelReason}
+                 onChangeText={setCancelReason}
+                 placeholder={t("cancellationReason")}
+                 multiline
+               />
+               <Button label={t("submit")} onPress={handleCancelBooking} />
             </View>
-          </View>
-        </Pressable>
+         </View>
       </Modal>
     </View>
   );
 }
 
-const WHITE = "#FFFFFF";
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-  },
-  headerTitle: { fontSize: 18, fontWeight: "700", flex: 1, textAlign: "center" },
-  scrollContent: { padding: 20 },
-  section: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 20,
-  },
-  sectionHeader: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
-  sectionTitle: { fontSize: 14, fontWeight: "700", marginLeft: 8, textTransform: "uppercase", letterSpacing: 0.5 },
-  infoRow: { marginBottom: 12 },
-  label: { fontSize: 12, marginBottom: 4 },
-  value: { fontSize: 15, fontWeight: "600" },
-  phoneGroup: { flexDirection: "row", flexWrap: "wrap" },
-  venueRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  venueName: { fontSize: 14, flex: 1 },
-  venuePrice: { fontSize: 14, fontWeight: "600" },
-  divider: { height: 1, backgroundColor: "#E8DDD4", marginVertical: 12 },
-  totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
-  totalLabel: { fontSize: 16, fontWeight: "800" },
-  totalValue: { fontSize: 20, fontWeight: "900" },
-  paymentLabel: { fontSize: 13 },
-  paymentValue: { fontSize: 14, fontWeight: "600" },
-  balanceRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#E8DDD4" },
-  balanceLabel: { fontSize: 15, fontWeight: "800" },
-  balanceValue: { fontSize: 18, fontWeight: "900" },
-  footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingTop: 15,
-    borderTopWidth: 1,
-    gap: 10,
-  },
-  callBtn: {
-    flex: 2,
-    height: 50,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  callBtnText: { color: WHITE, fontSize: 15, fontWeight: "700" },
-  pdfBtn: {
-    flex: 1,
-    height: 50,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  pdfBtnText: { fontSize: 14, fontWeight: "700" },
-  cancelBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  payBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 20 },
-  cancelModal: { borderRadius: 20, padding: 24 },
-  cancelModalTitle: { fontSize: 20, fontWeight: "800", marginBottom: 8 },
-  cancelModalSubtitle: { fontSize: 14, marginBottom: 20 },
-  cancelInput: { borderRadius: 12, borderWidth: 1, padding: 12, height: 100, textAlignVertical: "top", fontSize: 15, marginBottom: 20 },
-  modalActions: { flexDirection: "row", gap: 12 },
-  modalBtn: { flex: 1, height: 50, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  modalBtnText: { fontSize: 15, fontWeight: "700" },
+  header: { position: "absolute", top: 0, left: 0, right: 0, height: 100, justifyContent: "flex-end" },
+  headerInner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, height: 60 },
+  headerTitle: { fontSize: 17, fontWeight: "700" },
+  iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  scrollContent: { paddingHorizontal: 20 },
+  heroCard: { borderRadius: 24, padding: 24, marginBottom: 20 },
+  heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
+  heroRef: { fontSize: 22, fontWeight: "900", letterSpacing: -0.5, color: "#1A1209" },
+  heroDate: { fontSize: 14, color: "#6B5744", marginTop: 2 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  statusText: { fontSize: 10, fontWeight: "900", color: "#FFF" },
+  heroAmount: { borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.05)", paddingTop: 15 },
+  amountLabel: { fontSize: 12, color: "#6B5744", textTransform: "uppercase", fontWeight: "700" },
+  amountValue: { fontSize: 32, fontWeight: "900", color: "#1A1209", marginTop: 2 },
+  actionRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
+  quickAction: { flex: 1, borderRadius: 16, padding: 12, alignItems: "center", elevation: 2 },
+  actionIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  actionLabel: { fontSize: 12, fontWeight: "700", color: "#6B5744" },
+  section: { borderRadius: 20, padding: 20, marginBottom: 20, elevation: 1 },
+  sectionTitle: { fontSize: 13, fontWeight: "800", color: "#A89080", textTransform: "uppercase", letterSpacing: 1, marginBottom: 16 },
+  detailItem: { flexDirection: "row", gap: 15, marginBottom: 16 },
+  detailText: { flex: 1 },
+  detailLabel: { fontSize: 11, color: "#A89080", fontWeight: "600", marginBottom: 2 },
+  detailValue: { fontSize: 15, fontWeight: "600", color: "#1A1209" },
+  detailSub: { fontSize: 12, color: "#6B5744", marginTop: 2 },
+  priceRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
+  priceLabel: { fontSize: 14, color: "#6B5744" },
+  priceValue: { fontSize: 14, fontWeight: "700" },
+  divider: { height: 1, backgroundColor: "#F3F4F6", marginVertical: 10 },
+  balanceLabel: { fontSize: 16, fontWeight: "800", color: "#1A1209" },
+  balanceValue: { fontSize: 20, fontWeight: "900" },
+  bottomActions: { position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 15, borderTopWidth: 1, borderTopColor: "#E5E7EB" },
+  mainBtn: { height: 56, borderRadius: 16 },
 });

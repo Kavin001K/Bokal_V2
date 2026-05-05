@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 import { firstString } from "../lib/express-utils.js";
@@ -8,7 +8,24 @@ import { requireAdmin } from "../middlewares/auth.js";
 const router = Router();
 
 router.get("/users", requireAdmin, async (req, res) => {
-  const users = await db.select().from(usersTable).orderBy(usersTable.createdAt);
+  // Force no-cache to ensure the app always sees the latest team status
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
+  const conditions = and(
+    eq(usersTable.adminId, req.user!.adminId),
+    isNull(usersTable.deletedAt)
+  );
+
+  console.log(`!!! FETCH USERS - Admin: ${req.user?.email}`);
+  
+  const users = await db
+    .select()
+    .from(usersTable)
+    .where(conditions)
+    .orderBy(usersTable.createdAt);
+    
   res.json(
     users.map((u) => ({
       id: u.id,
@@ -54,7 +71,9 @@ router.post("/users", requireAdmin, async (req, res) => {
       fullName,
       email: email.toLowerCase().trim(),
       passwordHash,
-      role: role === "admin" ? "admin" : "employee",
+      // API can only create employees. Admins must be created via SQL by Owner.
+      role: "employee", 
+      adminId: req.user!.adminId,
       isActive: true,
       mustChangePw: true,
     })
@@ -87,10 +106,15 @@ router.put("/users/:id", requireAdmin, async (req, res) => {
 
   const updates: Partial<typeof usersTable.$inferInsert> = {};
   if (fullName !== undefined) updates.fullName = fullName;
-  if (role !== undefined) updates.role = role;
+  // Admin cannot change roles to admin via API
+  if (role !== undefined && role !== "admin") updates.role = role;
   if (isActive !== undefined) updates.isActive = isActive;
 
-  await db.update(usersTable).set(updates).where(eq(usersTable.id, id!));
+  console.log(`!!! UPDATE USER - ID: ${id}, Active: ${isActive}`);
+
+  await db.update(usersTable)
+    .set(updates)
+    .where(and(eq(usersTable.id, id!), eq(usersTable.adminId, req.user!.adminId)));
 
   const user = await db.select().from(usersTable).where(eq(usersTable.id, id!)).limit(1);
   if (!user[0]) {
@@ -108,6 +132,32 @@ router.put("/users/:id", requireAdmin, async (req, res) => {
     createdAt: user[0].createdAt.toISOString(),
     lastLogin: user[0].lastLogin?.toISOString() ?? null,
   });
+});
+
+router.delete("/users/:id", requireAdmin, async (req, res) => {
+  const id = firstString(req.params.id);
+
+  if (!id) {
+    res.status(400).json({ error: "User ID is required" });
+    return;
+  }
+
+  console.log(`!!! DELETE USER - ID: ${id}, Admin: ${req.user?.adminId}`);
+
+  // Soft delete: remove from screen but keep in DB
+  const [updated] = await db.update(usersTable)
+    .set({ deletedAt: new Date(), isActive: false })
+    .where(and(eq(usersTable.id, id), eq(usersTable.adminId, req.user!.adminId)))
+    .returning();
+
+  if (!updated) {
+    console.error(`!!! DELETE FAILED - User ${id} not found or not owned by admin ${req.user?.adminId}`);
+    res.status(404).json({ error: "Not found or unauthorized" });
+    return;
+  }
+
+  console.log(`!!! DELETE SUCCESS - User ${id} marked as deleted`);
+  res.json({ success: true, message: "User removed from screen" });
 });
 
 export default router;

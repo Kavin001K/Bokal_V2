@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,16 +22,43 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
+import { getApiBaseUrl } from "@/lib/apiBaseUrl";
 
 export default function ManageEmployeesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [showAddUser, setShowAddUser] = useState(false);
 
-  const { data: users, refetch: refetchUsers } = useGetUsers({
-    query: { queryKey: ["users"] },
-  });
+  const [users, setUsers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { token } = useAuth();
+
+  const fetchUsers = async () => {
+    if (!token) return;
+    try {
+      const baseUrl = getApiBaseUrl();
+      const response = await fetch(`${baseUrl}/api/users?t=${Date.now()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      setUsers(data);
+    } catch (error) {
+      console.error("Fetch users error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, [token]);
+
+  const refetchUsers = fetchUsers;
 
   const updateUserMutation = useUpdateUser({
     mutation: {
@@ -46,7 +73,7 @@ export default function ManageEmployeesScreen() {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
         <Feather name="lock" size={40} color={colors.border} />
-        <Text style={[styles.noAccessTitle, { color: colors.textSecondary }]}>Admin Only</Text>
+        <Text style={[styles.noAccessTitle, { color: colors.textSecondary }]}>{t("admins")} Only</Text>
       </View>
     );
   }
@@ -69,7 +96,7 @@ export default function ManageEmployeesScreen() {
         >
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Team Members</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("teamMembers")}</Text>
         <Pressable onPress={() => setShowAddUser(true)} hitSlop={8}>
           <View style={[styles.addIconBtn, { backgroundColor: colors.primary }]}>
             <Feather name="user-plus" size={16} color="#fff" />
@@ -86,19 +113,19 @@ export default function ManageEmployeesScreen() {
         <View style={styles.statsRow}>
           <View style={[styles.statCard, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}>
             <Text style={[styles.statNumber, { color: colors.primary }]}>{(users ?? []).length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Total</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>{t("total")}</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.success + "12", borderColor: colors.success + "30" }]}>
             <Text style={[styles.statNumber, { color: colors.success }]}>{(users ?? []).filter((u) => u.isActive).length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Active</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>{t("active")}</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.warning + "12", borderColor: colors.warning + "30" }]}>
             <Text style={[styles.statNumber, { color: colors.warning }]}>{admins.length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Admins</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>{t("admins")}</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.textMuted + "12", borderColor: colors.textMuted + "30" }]}>
             <Text style={[styles.statNumber, { color: colors.textSecondary }]}>{employees.length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Employees</Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>{t("employees")}</Text>
           </View>
         </View>
 
@@ -107,10 +134,10 @@ export default function ManageEmployeesScreen() {
           <>
             <View style={styles.sectionHeader}>
               <Feather name="shield" size={14} color={colors.primary} />
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Administrators</Text>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{t("administrators")}</Text>
             </View>
             {admins.map((u) => (
-              <UserCard key={u.id} user={u} colors={colors} updateUserMutation={updateUserMutation} />
+              <UserCard key={u.id} user={u} colors={colors} updateUserMutation={updateUserMutation} refetchUsers={refetchUsers} />
             ))}
           </>
         )}
@@ -118,23 +145,23 @@ export default function ManageEmployeesScreen() {
         {/* Employee section */}
         <View style={styles.sectionHeader}>
           <Feather name="users" size={14} color={colors.primary} />
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Employees</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{t("employees")}</Text>
         </View>
         {employees.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Feather name="user-plus" size={32} color={colors.border} />
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>No employees yet</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t("noEmployees")}</Text>
             <AnimatedButton
               style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
               onPress={() => setShowAddUser(true)}
             >
               <Feather name="plus" size={14} color="#fff" />
-              <Text style={styles.emptyBtnText}>Add First Employee</Text>
+              <Text style={styles.emptyBtnText}>{t("addFirstEmployee")}</Text>
             </AnimatedButton>
           </View>
         ) : (
           employees.map((u) => (
-            <UserCard key={u.id} user={u} colors={colors} updateUserMutation={updateUserMutation} />
+            <UserCard key={u.id} user={u} colors={colors} updateUserMutation={updateUserMutation} refetchUsers={refetchUsers} />
           ))
         )}
       </ScrollView>
@@ -147,6 +174,10 @@ export default function ManageEmployeesScreen() {
           refetchUsers();
         }}
         colors={colors}
+        title={t("addEmployee")}
+        createLabel={t("createEmployee")}
+        roleLabel={t("role")}
+        passwordLabel={t("password")}
       />
     </View>
   );
@@ -156,11 +187,47 @@ function UserCard({
   user: u,
   colors,
   updateUserMutation,
+  refetchUsers,
 }: {
   user: any;
   colors: ReturnType<typeof useColors>;
   updateUserMutation: any;
+  refetchUsers: () => void;
 }) {
+  const { token } = useAuth();
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Employee",
+      `Are you sure you want to delete ${u.fullName}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const baseUrl = getApiBaseUrl();
+              
+              const response = await fetch(`${baseUrl}/api/users/${u.id}`, {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              });
+
+              if (!response.ok) throw new Error("Failed to delete user");
+
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              refetchUsers();
+            } catch (error) {
+              Alert.alert("Error", "Could not delete user");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <View style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.userRow}>
@@ -183,19 +250,69 @@ function UserCard({
             </Text>
           )}
         </View>
-        <View style={styles.switchCol}>
-          <Switch
-            value={u.isActive}
-            onValueChange={(val) => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              updateUserMutation.mutate({ id: u.id, data: { isActive: val } });
-            }}
-            trackColor={{ false: colors.border, true: colors.primary + "60" }}
-            thumbColor={u.isActive ? colors.primary : colors.textMuted}
-          />
-          <Text style={[styles.switchLabel, { color: u.isActive ? colors.success : colors.textMuted }]}>
-            {u.isActive ? "Active" : "Inactive"}
-          </Text>
+        <View style={styles.actionCol}>
+          <View style={styles.switchCol}>
+            <Switch
+              value={u.isActive}
+              onValueChange={(val) => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                updateUserMutation.mutate({ id: u.id, data: { isActive: val } });
+              }}
+              trackColor={{ false: colors.border, true: colors.primary + "60" }}
+              thumbColor={u.isActive ? colors.primary : colors.textMuted}
+            />
+            <Text style={[styles.switchLabel, { color: u.isActive ? colors.success : colors.textMuted }]}>
+              {u.isActive ? "Active" : "Inactive"}
+            </Text>
+          </View>
+          {u.role !== 'admin' && (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable 
+                onPress={() => {
+                  Alert.prompt(
+                    "Reset Password",
+                    `Enter new password for ${u.fullName}`,
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { 
+                        text: "Reset", 
+                        onPress: async (newPassword?: string) => {
+                          if (!newPassword || newPassword.length < 6) {
+                            Alert.alert("Error", "Password must be at least 6 characters");
+                            return;
+                          }
+                          try {
+                            const baseUrl = getApiBaseUrl();
+                            const response = await fetch(`${baseUrl}/api/auth/reset-password/${u.id}`, {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${token}`,
+                              },
+                              body: JSON.stringify({ newPassword }),
+                            });
+                            if (!response.ok) throw new Error("Failed to reset password");
+                            Alert.alert("Success", "Password reset successfully");
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          } catch (error) {
+                            Alert.alert("Error", "Could not reset password");
+                          }
+                        }
+                      }
+                    ],
+                    "secure-text"
+                  );
+                }} 
+                hitSlop={12} 
+                style={[styles.deleteBtn, { backgroundColor: colors.primary + '15' }]}
+              >
+                <Feather name="key" size={14} color={colors.primary} />
+              </Pressable>
+              <Pressable onPress={handleDelete} hitSlop={12} style={styles.deleteBtn}>
+                <Feather name="trash-2" size={16} color={colors.destructive} />
+              </Pressable>
+            </View>
+          )}
         </View>
       </View>
     </View>
@@ -207,11 +324,19 @@ function AddUserModal({
   onClose,
   onCreated,
   colors,
+  title,
+  createLabel,
+  roleLabel,
+  passwordLabel,
 }: {
   visible: boolean;
   onClose: () => void;
   onCreated: () => void;
   colors: ReturnType<typeof useColors>;
+  title: string;
+  createLabel: string;
+  roleLabel: string;
+  passwordLabel: string;
 }) {
   const [form, setForm] = useState({
     fullName: "",
@@ -238,7 +363,7 @@ function AddUserModal({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Add Employee</Text>
+          <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>{title}</Text>
           <Pressable onPress={onClose} hitSlop={8}>
             <Feather name="x" size={22} color={colors.textSecondary} />
           </Pressable>
@@ -254,7 +379,7 @@ function AddUserModal({
           {[
             { label: "Full Name", key: "fullName", placeholder: "John Doe", keyboard: "default" as const },
             { label: "Email", key: "email", placeholder: "john@example.com", keyboard: "email-address" as const },
-            { label: "Password", key: "password", placeholder: "Min 6 characters", keyboard: "default" as const, secure: true },
+            { label: passwordLabel, key: "password", placeholder: "Min 6 characters", keyboard: "default" as const, secure: true },
           ].map((field) => (
             <View key={field.key} style={styles.modalField}>
               <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>{field.label}</Text>
@@ -272,7 +397,7 @@ function AddUserModal({
           ))}
 
           <View style={styles.modalField}>
-            <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Role</Text>
+            <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>{roleLabel}</Text>
             <View style={styles.roleToggle}>
               {(["employee", "admin"] as const).map((r) => (
                 <AnimatedButton
@@ -316,7 +441,7 @@ function AddUserModal({
             ) : (
               <>
                 <Feather name="user-plus" size={16} color="#fff" />
-                <Text style={styles.createBtnText}>Create Employee</Text>
+                <Text style={styles.createBtnText}>{createLabel}</Text>
               </>
             )}
           </AnimatedButton>
@@ -377,8 +502,10 @@ const styles = StyleSheet.create({
   lastLogin: { fontSize: 10 },
   roleBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   roleText: { fontSize: 10, fontWeight: "700" as const, textTransform: "uppercase" },
+  actionCol: { alignItems: "center", gap: 12, flexDirection: 'row' },
   switchCol: { alignItems: "center", gap: 2 },
   switchLabel: { fontSize: 9, fontWeight: "600" as const },
+  deleteBtn: { padding: 8, borderRadius: 10, backgroundColor: 'rgba(255, 59, 48, 0.1)' },
 
   emptyCard: {
     borderWidth: 1,

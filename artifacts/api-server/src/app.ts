@@ -2,11 +2,30 @@ import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
+import helmet from "helmet";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { seedIfEmpty } from "./lib/seed.js";
 
 const app: Express = express();
+const isProduction = process.env["NODE_ENV"] === "production";
+
+app.use(
+  helmet({
+    hsts: isProduction
+      ? {
+          maxAge: 31536000,
+          includeSubDomains: true,
+          preload: true,
+        }
+      : false,
+  }),
+);
+
+const allowedOrigins = (process.env.CORS_ORIGINS ?? "https://bookal-erp-v123.web.app,https://bookal-erp-v123.firebaseapp.com,https://bookal.onrender.com")
+  .split(",")
+  .map((v) => v.trim())
+  .filter(Boolean);
 
 app.use(
   pinoHttp({
@@ -30,11 +49,15 @@ app.use(
 
 // --- PRODUCTION OPTIMIZATION ---
 app.use(cors({
-  origin: [
-    "https://bookal-erp-v123.web.app",
-    "https://bookal-erp-v123.firebaseapp.com",
-    "https://bookal.onrender.com"
-  ],
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow all localhost origins for local development
+    if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) {
+      return callback(null, true);
+    }
+    return callback(new Error("CORS blocked"));
+  },
   credentials: true,
 }));
 

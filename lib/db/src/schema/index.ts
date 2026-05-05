@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   pgTable,
   text,
   boolean,
@@ -24,7 +25,10 @@ export const usersTable = pgTable("users", {
   phoneNumber: text("phone_number"),
   dateOfBirth: text("date_of_birth"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
   lastLogin: timestamp("last_login"),
+  adminId: uuid("admin_id").references((): AnyPgColumn => usersTable.id),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({
@@ -38,12 +42,18 @@ export const venuesTable = pgTable("venues", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   type: text("type").notNull(),
+  venueCategory: text("venue_category").notNull().default("other"),
+  amenities: jsonb("amenities").notNull().default("[]"),
+  colorTag: text("color_tag").default("#C75B2A"),
   pricePerHour: decimal("price_per_hour", { precision: 10, scale: 2 })
     .notNull()
     .default("0"),
   isActive: boolean("is_active").notNull().default(true),
   displayOrder: integer("display_order").notNull().default(0),
-});
+  adminId: uuid("admin_id").notNull().references(() => usersTable.id),
+}, (table) => ({
+  adminIdIdx: index("idx_venues_admin").on(table.adminId),
+}));
 
 export const insertVenueSchema = createInsertSchema(venuesTable).omit({
   id: true,
@@ -70,6 +80,7 @@ export const bookingsTable = pgTable(
     isPaid: boolean("is_paid").notNull().default(false),
     notes: text("notes"),
     status: text("status").notNull().default("confirmed"),
+    adminId: uuid("admin_id").references(() => usersTable.id),
     createdById: uuid("created_by_id")
       .notNull()
       .references(() => usersTable.id),
@@ -84,6 +95,7 @@ export const bookingsTable = pgTable(
     statusIdx: index("status_idx").on(table.status),
     customerNameIdx: index("customer_name_idx").on(table.customerName),
     createdByIdIdx: index("created_by_id_idx").on(table.createdById),
+    adminIdIdx: index("idx_bookings_admin").on(table.adminId),
   })
 );
 
@@ -120,10 +132,13 @@ export type BookingVenue = typeof bookingVenuesTable.$inferSelect;
 
 export const settingsTable = pgTable("settings", {
   id: uuid("id").primaryKey().defaultRandom(),
-  key: text("key").notNull().unique(),
+  key: text("key").notNull(),
   value: text("value").notNull(),
+  adminId: uuid("admin_id").references(() => usersTable.id),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  adminKeyIdx: uniqueIndex("idx_settings_admin_key").on(table.adminId, table.key),
+}));
 
 export type Setting = typeof settingsTable.$inferSelect;
 
@@ -152,6 +167,33 @@ export const insertAuditLogSchema = createInsertSchema(auditLogsTable).omit({
 });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogsTable.$inferSelect;
+
+export const refreshTokensTable = pgTable(
+  "refresh_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    deviceName: text("device_name"),
+    lastUsedAt: timestamp("last_used_at").notNull().defaultNow(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    userIdIdx: index("idx_refresh_tokens_user").on(table.userId),
+    tokenIdx: uniqueIndex("idx_refresh_tokens_token").on(table.token),
+  })
+);
+
+export const insertRefreshTokenSchema = createInsertSchema(refreshTokensTable).omit({
+  id: true,
+  createdAt: true,
+  lastUsedAt: true,
+});
+export type InsertRefreshToken = z.infer<typeof insertRefreshTokenSchema>;
+export type RefreshToken = typeof refreshTokensTable.$inferSelect;
 
 export const bookingPdfsTable = pgTable("booking_pdfs", {
   id: uuid("id").primaryKey().defaultRandom(),
