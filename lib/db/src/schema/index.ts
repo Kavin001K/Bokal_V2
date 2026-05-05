@@ -74,7 +74,7 @@ export const bookingsTable = pgTable(
     tamilDateLabel: text("tamil_date_label"),
     startTime: text("start_time").notNull(),
     endTime: text("end_time").notNull(),
-    durationHours: decimal("duration_hours", { precision: 4, scale: 2 }).notNull(),
+    durationHours: decimal("duration_hours", { precision: 5, scale: 2 }).notNull(),
     totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
     advanceAmount: decimal("advance_amount", { precision: 12, scale: 2 }).notNull().default("0"),
     isPaid: boolean("is_paid").notNull().default(false),
@@ -134,7 +134,7 @@ export const settingsTable = pgTable("settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   key: text("key").notNull(),
   value: text("value").notNull(),
-  adminId: uuid("admin_id").references(() => usersTable.id),
+  adminId: uuid("admin_id").notNull().references(() => usersTable.id),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
   adminKeyIdx: uniqueIndex("idx_settings_admin_key").on(table.adminId, table.key),

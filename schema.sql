@@ -188,12 +188,14 @@ using (bucket_id = 'pdfs' and (auth.jwt() ->> 'role') = 'admin')
 with check (bucket_id = 'pdfs' and (auth.jwt() ->> 'role') = 'admin');
 
 -- 5. SEED DATA
-insert into public.venues (name, type, venue_category, price_per_hour) values
-('Main Mahal', 'mahal', 'mahal', 5000.00),
-('AC Room 1', 'room', 'ac_room', 500.00),
-('AC Room 2', 'room', 'ac_room', 500.00),
-('Dining Hall', 'mahal', 'dining_hall', 2000.00)
-on conflict do nothing;
+-- Note: Venues require admin_id (set via application seed, not raw SQL).
+-- Run the application seed (seed.ts) to create venues with proper admin_id assignment.
+-- insert into public.venues (name, type, venue_category, price_per_hour, admin_id) values
+-- ('Main Mahal', 'mahal', 'mahal', 5000.00, 'ADMIN_UUID_HERE'),
+-- ('AC Room 1', 'room', 'ac_room', 500.00, 'ADMIN_UUID_HERE'),
+-- ('AC Room 2', 'room', 'ac_room', 500.00, 'ADMIN_UUID_HERE'),
+-- ('Dining Hall', 'mahal', 'dining_hall', 2000.00, 'ADMIN_UUID_HERE')
+-- on conflict do nothing;
 
 -- Default Business Settings
 insert into public.settings (key, value) values 

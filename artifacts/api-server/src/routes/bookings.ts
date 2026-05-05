@@ -4,7 +4,7 @@ import { db, bookingsTable, bookingVenuesTable, venuesTable, usersTable, auditLo
 import { requireAuth } from "../middlewares/auth.js";
 import { generateBookingConfirmationPdf, mergePdfs } from "../lib/pdf-generator.js";
 import { logger } from "../lib/logger.js";
-import { uploadToBucket, downloadFromBucket } from "../lib/r2-storage.js";
+import { uploadToBucket, downloadFromBucket } from "../lib/supabase-storage.js";
 import { firstString } from "../lib/express-utils.js";
 
 // Escape LIKE special characters to prevent pattern injection
@@ -51,7 +51,7 @@ function formatDateSafe(val: any): string {
 
 async function generateBookingRef(): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = `BKL-${year}-`;
+  const prefix = `MBK-${year}-`;
   // Use SQL MAX to get highest ref atomically — avoids race condition duplicates
   const result = await db
     .select({
@@ -190,7 +190,7 @@ async function formatBooking(b: typeof bookingsTable.$inferSelect, venues: Array
     id: b.id,
     bookingRef: b.bookingRef,
     customerName: b.customerName,
-    phoneNumbers: b.phoneNumbers as string[],
+    phoneNumbers: Array.isArray(b.phoneNumbers) ? b.phoneNumbers as string[] : [],
     address: b.address ?? null,
     idProofUrl: b.idProofUrl ?? null,
     bookingDate: b.bookingDate,
@@ -376,15 +376,9 @@ router.get("/bookings/:id", requireAuth, async (req, res) => {
     .limit(1);
 
   if (!booking[0]) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
-
-  if (!booking[0]) {
     res.status(403).json({ error: "Forbidden", message: "You do not have permission to view this booking or it does not exist" });
     return;
   }
-  // --- END OF FIX ---
 
   const [venueRows, createdByRows] = await Promise.all([
     db
@@ -488,7 +482,7 @@ router.post("/bookings", requireAuth, async (req, res) => {
   const newBooking = await db.transaction(async (tx) => {
     // --- FIX: Generate ref inside transaction to reduce race window ---
     const year = new Date().getFullYear();
-    const prefix = `BKL-${year}-`;
+    const prefix = `MBK-${year}-`;
     const result = await tx
       .select({ maxRef: sql<string>`MAX(${bookingsTable.bookingRef})` })
       .from(bookingsTable)
@@ -512,7 +506,7 @@ router.post("/bookings", requireAuth, async (req, res) => {
         endTime,
         durationHours: durationHours.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
-        advanceAmount: String(req.body.advanceAmount ?? 0),
+        advanceAmount: Number(req.body.advanceAmount ?? 0).toFixed(2),
         isPaid: !!req.body.isPaid,
         notes: notes ?? null,
         status: "confirmed",
@@ -663,7 +657,7 @@ router.put("/bookings/:id", requireAuth, async (req, res) => {
         endTime,
         durationHours: durationHours.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
-        advanceAmount: req.body.advanceAmount !== undefined ? String(req.body.advanceAmount) : existing[0]!.advanceAmount,
+        advanceAmount: req.body.advanceAmount !== undefined ? Number(req.body.advanceAmount).toFixed(2) : existing[0]!.advanceAmount,
         isPaid: req.body.isPaid !== undefined ? !!req.body.isPaid : existing[0]!.isPaid,
         notes: notes ?? null,
         updatedAt: new Date(),
@@ -738,7 +732,7 @@ router.post("/bookings/:id/pay", requireAuth, async (req, res) => {
   res.json({ success: true, message: "Marked as paid" });
 });
 
-router.delete("/bookings/:id", requireAuth, async (req, res) => {
+router.post("/bookings/:id/cancel", requireAuth, async (req, res) => {
   const id = firstString(req.params.id);
   const { reason } = req.body as { reason: string };
 

@@ -196,9 +196,7 @@ router.post("/auth/change-password", requireAuth, async (req, res) => {
   }
 
   // Always require current password UNLESS this is a forced first-login change
-  if (user[0].mustChangePw) {
-    // First-login forced change — skip current password check
-  } else {
+  if (!user[0].mustChangePw) {
     if (!currentPassword) {
       res.status(400).json({ error: "Bad Request", message: "Current password is required" });
       return;
@@ -247,7 +245,7 @@ router.post("/auth/reset-password/:userId", requireAdmin, async (req, res) => {
   const hash = await bcrypt.hash(newPassword, 12);
   await db
     .update(usersTable)
-    .set({ passwordHash: hash, mustChangePw: true })
+    .set({ passwordHash: hash, mustChangePw: false })
     .where(eq(usersTable.id, userId!));
 
   res.json({ success: true, message: "Password reset successfully. User must change on next login." });

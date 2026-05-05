@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, settingsTable } from "@workspace/db";
-import { requireAdmin } from "../middlewares/auth.js";
-import { uploadToBucket, getPublicUrl } from "../lib/r2-storage.js";
+import { requireAdmin, requireAuth } from "../middlewares/auth.js";
+import { uploadToBucket, downloadFromBucket } from "../lib/supabase-storage.js";
 
 const router = Router();
 
-router.get("/settings", requireAdmin, async (req, res) => {
+router.get("/settings", requireAuth, async (req, res) => {
   const settings = await db.select().from(settingsTable).where(eq(settingsTable.adminId, req.user!.adminId));
   const obj: Record<string, string> = {};
   for (const s of settings) {
@@ -32,8 +32,13 @@ const ALLOWED_SETTINGS_KEYS = new Set([
 
 router.put("/settings", requireAdmin, async (req, res) => {
   const updates = req.body as Record<string, string>;
+  const unknownKeys = Object.keys(updates).filter((k) => !ALLOWED_SETTINGS_KEYS.has(k));
+  if (unknownKeys.length > 0) {
+    res.status(400).json({ error: "Bad Request", message: `Unknown settings keys: ${unknownKeys.join(", ")}` });
+    return;
+  }
   for (const [key, value] of Object.entries(updates)) {
-    if (!ALLOWED_SETTINGS_KEYS.has(key)) continue; // Skip unknown keys
+    if (!ALLOWED_SETTINGS_KEYS.has(key)) continue;
     await db
       .insert(settingsTable)
       .values({ key, value: String(value), adminId: req.user!.adminId })
@@ -93,15 +98,22 @@ router.post("/settings/rules-pdf", requireAdmin, async (req, res) => {
   }
 });
 
-router.get("/settings/rules-pdf", requireAdmin, async (req, res) => {
+router.get("/settings/rules-pdf", requireAuth, async (req, res) => {
   const setting = await db.select().from(settingsTable).where(and(eq(settingsTable.key, "rules_pdf_path"), eq(settingsTable.adminId, req.user!.adminId))).limit(1);
   if (!setting.length || !setting[0]!.value) {
     res.status(404).json({ message: "No rules PDF found" });
     return;
   }
 
-  const publicUrl = await getPublicUrl("pdfs", setting[0]!.value);
-  res.redirect(publicUrl);
+  try {
+    const buffer = await downloadFromBucket("pdfs", setting[0]!.value);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="venue_rules.pdf"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
+  } catch {
+    res.status(404).json({ message: "Rules PDF file not found in storage" });
+  }
 });
 
 export default router;

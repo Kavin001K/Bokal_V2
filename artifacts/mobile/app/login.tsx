@@ -93,7 +93,7 @@ export default function LoginScreen() {
 
   const handleLogin = () => {
     setError("");
-    if (!email.trim() || !password) {
+    if (!email.trim() || !password.trim()) {
       setError("Please enter email and password");
       return;
     }

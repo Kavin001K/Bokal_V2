@@ -5,7 +5,10 @@ import { usersTable, venuesTable, settingsTable } from "@workspace/db/schema";
 import { logger } from "./logger.js";
 
 const DEFAULT_ADMIN_EMAIL = "admin@bookal.app";
-const DEFAULT_ADMIN_PASSWORD = process.env["DEFAULT_ADMIN_PASSWORD"] || "Bookal@2026";
+const DEFAULT_ADMIN_PASSWORD = process.env["DEFAULT_ADMIN_PASSWORD"];
+if (!DEFAULT_ADMIN_PASSWORD) {
+  logger.warn("DEFAULT_ADMIN_PASSWORD not set — admin seed will skip if no admin exists");
+}
 
 export async function seedIfEmpty() {
   try {
@@ -16,6 +19,10 @@ export async function seedIfEmpty() {
       .limit(1);
 
     if (adminUser.length === 0) {
+      if (!DEFAULT_ADMIN_PASSWORD) {
+        logger.error("Cannot seed admin — DEFAULT_ADMIN_PASSWORD env var is not set");
+        return;
+      }
       logger.info("No admin user found, seeding...");
       const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 12);
       const [newAdmin] = await db.insert(usersTable).values({
@@ -42,8 +49,8 @@ export async function seedIfEmpty() {
           .where(eq(usersTable.email, DEFAULT_ADMIN_EMAIL));
       }
 
-      if (process.env["FORCE_ADMIN_PASSWORD_RESET"]?.toLowerCase() === "true") {
-        console.log("!!! FORCING ADMIN PASSWORD RESET TO:", DEFAULT_ADMIN_PASSWORD);
+      if (process.env["FORCE_ADMIN_PASSWORD_RESET"]?.toLowerCase() === "true" && DEFAULT_ADMIN_PASSWORD) {
+        console.log("!!! FORCING ADMIN PASSWORD RESET");
         const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 12);
         await db
           .update(usersTable)
@@ -104,7 +111,7 @@ export async function seedIfEmpty() {
       }
     }
 
-    logger.info(`Seed complete. Login: ${DEFAULT_ADMIN_EMAIL} / ${DEFAULT_ADMIN_PASSWORD}`);
+    logger.info(`Seed complete.${DEFAULT_ADMIN_PASSWORD ? ` Login: ${DEFAULT_ADMIN_EMAIL} / ${DEFAULT_ADMIN_PASSWORD}` : ""}`);
   } catch (err) {
     logger.error({ err }, "Seed error");
   }

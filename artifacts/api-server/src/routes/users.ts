@@ -72,7 +72,7 @@ router.post("/users", requireAdmin, async (req, res) => {
       email: email.toLowerCase().trim(),
       passwordHash,
       // API can only create employees. Admins must be created via SQL by Owner.
-      role: "employee", 
+      role: role && role !== "admin" ? role : "employee",
       adminId: req.user!.adminId,
       isActive: true,
       mustChangePw: true,
@@ -109,6 +109,11 @@ router.put("/users/:id", requireAdmin, async (req, res) => {
   // Admin cannot change roles to admin via API
   if (role !== undefined && role !== "admin") updates.role = role;
   if (isActive !== undefined) updates.isActive = isActive;
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "Bad Request", message: "No valid fields to update" });
+    return;
+  }
 
   console.log(`!!! UPDATE USER - ID: ${id}, Active: ${isActive}`);
 

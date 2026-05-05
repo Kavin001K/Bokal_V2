@@ -537,12 +537,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
     return pdfDoc.save();
   } catch (err) {
     console.error("PDF Redesign Error:", err);
-    // Safe Fallback
-    const doc = await PDFDocument.create();
-    const font = await doc.embedFont(StandardFonts.Helvetica);
-    const p = doc.addPage([WIDTH, HEIGHT]);
-    p.drawText("BOOKAL SYSTEM RECOVERY: RECEIPT GENERATED", { x: 50, y: 800, size: 14, font });
-    return doc.save();
+    throw err;
   }
 }
 

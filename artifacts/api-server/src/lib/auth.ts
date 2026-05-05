@@ -13,6 +13,8 @@ export interface JwtPayload {
   role: string;
   adminId: string;
   mustChangePw: boolean;
+  iat?: number;
+  exp?: number;
 }
 
 export function signToken(payload: JwtPayload): string {
