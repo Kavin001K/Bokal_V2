@@ -3,11 +3,21 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { seedIfEmpty } from "./lib/seed.js";
 
 const app: Express = express();
+
+// Global rate limiter — 200 requests per minute per IP
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too Many Requests", message: "Rate limit exceeded. Try again shortly." },
+}));
 const isProduction = process.env["NODE_ENV"] === "production";
 
 app.use(

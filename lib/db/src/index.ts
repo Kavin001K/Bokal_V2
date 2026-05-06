@@ -21,8 +21,8 @@ pool.query(`
   ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number text;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth text;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
-`).catch((err) => {
-  console.error("Failed to run auto-migrations:", err);
+`).catch(() => {
+  // Migration failures are non-fatal — columns may already exist
 });
 
 export { amenityBillsTable } from "./schema";

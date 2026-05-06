@@ -5,6 +5,7 @@
 import { readFile } from "node:fs/promises";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, degrees } from "pdf-lib";
+import { logger } from "./logger.js";
 
 export interface BusinessInfo {
   name: string;
@@ -565,7 +566,7 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
 
     return pdfDoc.save();
   } catch (err) {
-    console.error("PDF Redesign Error:", err);
+    logger.error({ err }, "PDF Redesign Error");
     throw err;
   }
 }
@@ -846,7 +847,7 @@ export async function mergePdfs(pdfBuffers: Uint8Array[]): Promise<Uint8Array> {
       const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
       copiedPages.forEach((page) => mergedPdf.addPage(page));
     } catch (err) {
-      console.error("Error merging PDF chunk:", err);
+      logger.error({ err }, "Error merging PDF chunk");
     }
   }
   return mergedPdf.save();

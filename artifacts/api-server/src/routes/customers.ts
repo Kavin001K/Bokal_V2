@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { or, ilike, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db, bookingsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
