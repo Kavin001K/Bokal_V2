@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { AppAlertModal } from "@/components/AppAlertModal";
 import { getApiBaseUrl } from "@/lib/apiBaseUrl";
 
@@ -22,6 +23,7 @@ export default function EditProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, token, updateUser } = useAuth();
+  const { t } = useLanguage();
   
   const [form, setForm] = useState({
     fullName: user?.fullName || "",
@@ -67,7 +69,7 @@ export default function EditProfileScreen() {
       if (!res.ok) {
         try {
           const errorData = JSON.parse(responseText);
-          throw new Error(errorData.message || "Update failed");
+          throw new Error(errorData.message || t("updateFailed"));
         } catch {
           throw new Error("Server error. Please ensure your backend is running.");
         }
@@ -79,15 +81,15 @@ export default function EditProfileScreen() {
       setAlert({ 
         visible: true, 
         type: 'success', 
-        title: 'Profile Updated', 
-        message: 'Your personal information has been saved successfully.' 
+        title: t("profileUpdatedTitle"),
+        message: t("profileUpdatedDesc"),
       });
     } catch (err: any) {
-      setAlert({ 
-        visible: true, 
-        type: 'error', 
-        title: 'Update Failed', 
-        message: err.message || 'Something went wrong' 
+      setAlert({
+        visible: true,
+        type: 'error',
+        title: t("updateFailed"),
+        message: err.message || t("unexpectedError"),
       });
     } finally {
       setLoading(false);
@@ -102,7 +104,7 @@ export default function EditProfileScreen() {
   };
 
   const formatDate = (dateStr: string) => {
-    if (!dateStr) return "Select Date";
+    if (!dateStr) return t("selectDate");
     const [y, m, d] = dateStr.split('-');
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return `${d} ${months[parseInt(m)-1]} ${y}`;
@@ -123,13 +125,13 @@ export default function EditProfileScreen() {
         >
           <Feather name="arrow-left" size={24} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Edit Profile</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("editProfileTitle")}</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Full Name</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>{t("fullNameLabel")}</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.textPrimary }]}
             value={form.fullName}
@@ -139,7 +141,7 @@ export default function EditProfileScreen() {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Phone Number</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>{t("phoneNumber")}</Text>
           <View style={[styles.input, styles.phoneInputContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.countryCode, { color: colors.textPrimary }]}>+91</Text>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -158,7 +160,7 @@ export default function EditProfileScreen() {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Date of Birth</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>{t("dateOfBirth")}</Text>
           <Pressable 
             onPress={() => { Haptics.selectionAsync(); setShowDatePicker(true); }}
             style={[styles.input, styles.dateInput, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -175,7 +177,7 @@ export default function EditProfileScreen() {
           disabled={loading}
           style={[styles.saveBtn, { backgroundColor: colors.primary }]}
         >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{t("saveChanges")}</Text>}
         </AnimatedButton>
       </ScrollView>
 
@@ -194,7 +196,7 @@ export default function EditProfileScreen() {
       <Modal transparent animationType="slide" visible={showDatePicker}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Select Birth Date</Text>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>{t("selectBirthDate")}</Text>
             
             <View style={styles.pickerRow}>
               <View style={styles.pickerCol}>
@@ -231,10 +233,10 @@ export default function EditProfileScreen() {
 
             <View style={styles.modalFooter}>
               <Pressable onPress={() => setShowDatePicker(false)} style={styles.cancelBtn}>
-                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>{t("cancel")}</Text>
               </Pressable>
               <Pressable onPress={confirmDate} style={[styles.confirmBtn, { backgroundColor: colors.primary }]}>
-                <Text style={styles.confirmBtnText}>Confirm</Text>
+                <Text style={styles.confirmBtnText}>{t("confirmDate")}</Text>
               </Pressable>
             </View>
           </View>

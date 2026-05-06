@@ -175,7 +175,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>{t("settings")}</Text>
 
-        <SectionHeader title={t("selectLanguage")} icon="globe" colors={colors} />
+        <SectionHeader title={t("selectLanguageSetting")} icon="globe" colors={colors} />
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.rulesActions}>
             <Pressable
@@ -193,21 +193,21 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <SectionHeader title="Venue Pricing" icon="dollar-sign" colors={colors} />
+        <SectionHeader title={t("venuePricing")} icon="dollar-sign" colors={colors} />
         <AnimatedButton
           style={[styles.card, styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: 16 }]}
           onPress={() => router.push("/manage-venues")}
         >
           <View style={styles.menuContent}>
             <Feather name="plus-square" size={20} color={colors.primary} />
-            <Text style={[styles.menuText, { color: colors.textPrimary }]}>Manage Venues & Amenities</Text>
+            <Text style={[styles.menuText, { color: colors.textPrimary }]}>{t("manageVenues")}</Text>
           </View>
           <Feather name="chevron-right" size={20} color={colors.textMuted} />
         </AnimatedButton>
 
-        <SectionHeader title="Business Information" icon="briefcase" colors={colors} />
+        <SectionHeader title={t("businessInformation")} icon="briefcase" colors={colors} />
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Business Name</Text>
+          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{t("businessName")}</Text>
           <TextInput
             style={[styles.bizInput, { color: colors.textPrimary, borderColor: colors.border }]}
             value={bizForm.biz_name}
@@ -215,7 +215,7 @@ export default function SettingsScreen() {
             placeholder="e.g. Bookal Venues"
           />
 
-          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Tagline / Motto</Text>
+          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{t("taglineMotto")}</Text>
           <TextInput
             style={[styles.bizInput, { color: colors.textPrimary, borderColor: colors.border }]}
             value={bizForm.biz_tagline}
@@ -223,7 +223,7 @@ export default function SettingsScreen() {
             placeholder="e.g. Excellence in Hospitality"
           />
 
-          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>GST Number</Text>
+          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{t("gstNumber")}</Text>
           <TextInput
             style={[styles.bizInput, { color: colors.textPrimary, borderColor: colors.border }]}
             value={bizForm.biz_gst}
@@ -234,7 +234,7 @@ export default function SettingsScreen() {
 
           <View style={styles.bizRow}>
             <View style={{ flex: 1, marginRight: 8 }}>
-              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Phone</Text>
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{t("phone")}</Text>
               <TextInput
                 style={[styles.bizInput, { color: colors.textPrimary, borderColor: colors.border }]}
                 value={bizForm.biz_phone}
@@ -243,7 +243,7 @@ export default function SettingsScreen() {
               />
             </View>
             <View style={{ flex: 1, marginLeft: 8 }}>
-              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Email</Text>
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{t("email")}</Text>
               <TextInput
                 style={[styles.bizInput, { color: colors.textPrimary, borderColor: colors.border }]}
                 value={bizForm.biz_email}
@@ -254,7 +254,7 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Address</Text>
+          <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{t("addressSetting")}</Text>
           <TextInput
             style={[styles.bizInput, styles.addressInput, { color: colors.textPrimary, borderColor: colors.border }]}
             value={bizForm.biz_address}
@@ -268,52 +268,52 @@ export default function SettingsScreen() {
             onPress={handleSaveBusinessInfo}
             disabled={isSavingBiz}
           >
-            {isSavingBiz ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBizBtnText}>Save Business Profile</Text>}
+            {isSavingBiz ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBizBtnText}>{t("saveBusinessProfile")}</Text>}
           </AnimatedButton>
         </View>
 
-        <SectionHeader title="Rules & Documents" icon="file-text" colors={colors} />
+        <SectionHeader title={t("rulesDocuments")} icon="file-text" colors={colors} />
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.rulesHeader, { color: colors.textPrimary }]}>Current Rules PDF:</Text>
+          <Text style={[styles.rulesHeader, { color: colors.textPrimary }]}>{t("currentRulesPdf")}</Text>
           <View style={styles.rulesFileRow}>
             <Feather name="paperclip" size={16} color={colors.textSecondary} />
             <Text style={[styles.rulesFileName, { color: colors.textSecondary }]}>
-              {settingsData?.rules_pdf_path ? settingsData.rules_pdf_path : "No rules PDF uploaded"}
+              {settingsData?.rules_pdf_path ? settingsData.rules_pdf_path : t("noRulesPdf")}
             </Text>
           </View>
           
           <View style={styles.rulesActions}>
             <Pressable style={[styles.rulesBtn, { backgroundColor: colors.secondary }]} onPress={handlePreviewPdf}>
               <Feather name="eye" size={16} color={colors.textSecondary} />
-              <Text style={[styles.rulesBtnText, { color: colors.textSecondary }]}>Preview</Text>
+              <Text style={[styles.rulesBtnText, { color: colors.textSecondary }]}>{t("preview")}</Text>
             </Pressable>
             <Pressable style={[styles.rulesBtn, { backgroundColor: colors.primary }]} onPress={handleUploadRulesPdf}>
               {isUploading ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="upload" size={16} color="#fff" />}
-              <Text style={[styles.rulesBtnText, { color: "#fff" }]}>Upload</Text>
+              <Text style={[styles.rulesBtnText, { color: "#fff" }]}>{t("upload")}</Text>
             </Pressable>
           </View>
         </View>
 
-        <SectionHeader title="Team" icon="users" colors={colors} />
+        <SectionHeader title={t("team")} icon="users" colors={colors} />
         <AnimatedButton
           style={[styles.card, styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border }]}
           onPress={() => router.push("/manage-employees")}
         >
           <View style={styles.menuContent}>
             <Feather name="users" size={20} color={colors.primary} />
-            <Text style={[styles.menuText, { color: colors.textPrimary }]}>Manage Employees</Text>
+            <Text style={[styles.menuText, { color: colors.textPrimary }]}>{t("manageEmployees")}</Text>
           </View>
           <Feather name="chevron-right" size={20} color={colors.textMuted} />
         </AnimatedButton>
 
-        <SectionHeader title="Account" icon="user" colors={colors} />
+        <SectionHeader title={t("account")} icon="user" colors={colors} />
         <AnimatedButton
           style={[styles.card, styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border }]}
           onPress={() => router.push("/edit-profile")}
         >
           <View style={styles.menuContent}>
             <Feather name="edit-3" size={20} color={colors.primary} />
-            <Text style={[styles.menuText, { color: colors.textPrimary }]}>Edit Profile</Text>
+            <Text style={[styles.menuText, { color: colors.textPrimary }]}>{t("editProfile")}</Text>
           </View>
           <Feather name="chevron-right" size={20} color={colors.textMuted} />
         </AnimatedButton>
@@ -324,7 +324,7 @@ export default function SettingsScreen() {
         >
           <View style={styles.menuContent}>
             <Feather name="lock" size={20} color={colors.primary} />
-            <Text style={[styles.menuText, { color: colors.textPrimary }]}>Change Password</Text>
+            <Text style={[styles.menuText, { color: colors.textPrimary }]}>{t("changePassword")}</Text>
           </View>
           <Feather name="chevron-right" size={20} color={colors.textMuted} />
         </AnimatedButton>
@@ -335,7 +335,7 @@ export default function SettingsScreen() {
         >
           <View style={styles.menuContent}>
             <Feather name="log-out" size={20} color={colors.destructive} />
-            <Text style={[styles.menuText, { color: colors.destructive }]}>Logout</Text>
+            <Text style={[styles.menuText, { color: colors.destructive }]}>{t("logout")}</Text>
           </View>
         </AnimatedButton>
       </ScrollView>

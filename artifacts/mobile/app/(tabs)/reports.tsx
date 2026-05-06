@@ -18,6 +18,9 @@ import { Skeleton } from "@/components/Skeleton";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { getApiBaseUrl } from "@/lib/apiBaseUrl";
+import CalendarPicker from "@/components/CalendarPicker";
+
+import { useLanguage } from "@/context/LanguageContext";
 
 function getDateRange(preset: string, customFrom?: string, customTo?: string): { from: string; to: string } {
   const now = new Date();
@@ -54,9 +57,11 @@ export default function ReportsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [preset, setPreset] = useState("month");
   const [customFrom, setCustomFrom] = useState(getDateRange("today").from);
   const [customTo, setCustomTo] = useState(getDateRange("today").to);
+  const [showCalendar, setShowCalendar] = useState(false);
   
   const { from, to } = getDateRange(preset, customFrom, customTo);
 
@@ -74,18 +79,18 @@ export default function ReportsScreen() {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
         <Feather name="lock" size={40} color={colors.border} />
-        <Text style={[styles.noAccessTitle, { color: colors.textSecondary }]}>Admin Only</Text>
-        <Text style={[styles.noAccessText, { color: colors.textMuted }]}>Reports are only accessible to admins</Text>
+        <Text style={[styles.noAccessTitle, { color: colors.textSecondary }]}>{t("adminOnly")}</Text>
+        <Text style={[styles.noAccessText, { color: colors.textMuted }]}>{t("reportsAdminOnly")}</Text>
       </View>
     );
   }
 
   const PRESETS = [
-    { key: "today", label: "Today" },
-    { key: "week", label: "Week" },
-    { key: "month", label: "Month" },
-    { key: "all", label: "All" },
-    { key: "custom", label: "Custom" },
+    { key: "today", label: t("todayPreset") },
+    { key: "week", label: t("weekPreset") },
+    { key: "month", label: t("monthPreset") },
+    { key: "all", label: t("allPreset") },
+    { key: "custom", label: t("customPreset") },
   ];
 
   const exportToExcel = async () => {
@@ -112,7 +117,7 @@ export default function ReportsScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       console.error(e);
-      Alert.alert("Error", "Could not generate Excel report.");
+      Alert.alert(t("errorTitle"), t("excelError"));
     }
   };
 
@@ -130,14 +135,14 @@ export default function ReportsScreen() {
         toolbarColor: colors.background,
       });
     } catch (err) {
-      Alert.alert("Error", "Could not generate PDF report.");
+      Alert.alert(t("errorTitle"), t("pdfError"));
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Reports</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("reports")}</Text>
       </View>
 
       <ScrollView
@@ -176,22 +181,17 @@ export default function ReportsScreen() {
         </Text>
 
         {preset === "custom" && (
-          <View style={styles.customDateRow}>
-            <RNTextInput
-              style={[styles.customDateInput, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="From (YYYY-MM-DD)"
-              placeholderTextColor={colors.textMuted}
-              value={customFrom}
-              onChangeText={setCustomFrom}
-            />
-            <RNTextInput
-              style={[styles.customDateInput, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="To (YYYY-MM-DD)"
-              placeholderTextColor={colors.textMuted}
-              value={customTo}
-              onChangeText={setCustomTo}
-            />
-          </View>
+          <Pressable
+            style={[styles.calendarBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+            onPress={() => setShowCalendar(true)}
+          >
+            <Feather name="calendar" size={16} color={colors.primary} />
+            <Text style={[styles.calendarBtnText, { color: colors.textPrimary }]}>
+              {new Date(customFrom + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+              {"  →  "}
+              {new Date(customTo + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+            </Text>
+          </Pressable>
         )}
 
         <View style={styles.exportRow}>
@@ -200,14 +200,14 @@ export default function ReportsScreen() {
             onPress={exportToExcel}
           >
             <Feather name="file-text" size={16} color={colors.textPrimary} />
-            <Text style={[styles.exportBtnText, { color: colors.textPrimary }]}>Export Excel</Text>
+            <Text style={[styles.exportBtnText, { color: colors.textPrimary }]}>{t("exportExcel")}</Text>
           </Pressable>
           <Pressable
             style={[styles.exportBtn, { backgroundColor: colors.primary }]}
             onPress={exportToPDF}
           >
             <Feather name="download" size={16} color="#fff" />
-            <Text style={[styles.exportBtnText, { color: "#fff" }]}>Download PDF</Text>
+            <Text style={[styles.exportBtnText, { color: "#fff" }]}>{t("downloadPdf")}</Text>
           </Pressable>
         </View>
 
@@ -227,18 +227,18 @@ export default function ReportsScreen() {
         ) : summary ? (
           <>
             <View style={styles.statsGrid}>
-              <StatCard label="Total Bookings" value={String(summary.totalBookings)} colors={colors} icon="calendar" />
+              <StatCard label={t("totalBookings")} value={String(summary.totalBookings)} colors={colors} icon="calendar" />
               <StatCard
-                label="Revenue"
+                label={t("revenue")}
                 value={`₹${Number(summary.totalRevenue).toLocaleString("en-IN")}`}
                 colors={colors}
                 icon="trending-up"
                 accent
               />
-              <StatCard label="Confirmed" value={String(summary.confirmedBookings)} colors={colors} icon="check-circle" />
-              <StatCard label="Cancelled" value={String(summary.cancelledBookings)} colors={colors} icon="x-circle" />
+              <StatCard label={t("confirmedBookings")} value={String(summary.confirmedBookings)} colors={colors} icon="check-circle" />
+              <StatCard label={t("cancelledBookings")} value={String(summary.cancelledBookings)} colors={colors} icon="x-circle" />
               <StatCard
-                label="Avg Value"
+                label={t("avgValue")}
                 value={`₹${Math.round(summary.avgBookingValue).toLocaleString("en-IN")}`}
                 colors={colors}
                 icon="bar-chart-2"
@@ -247,7 +247,7 @@ export default function ReportsScreen() {
 
             {summary.byVenue.length > 0 && (
               <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Venue Performance</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{t("venuePerformance")}</Text>
                 {summary.byVenue.map((v) => {
                   const maxRevenue = Math.max(...summary.byVenue.map((x) => Number(x.revenue)));
                   const barWidth = maxRevenue > 0 ? (Number(v.revenue) / maxRevenue) * 100 : 0;
@@ -256,7 +256,7 @@ export default function ReportsScreen() {
                       <View style={styles.venueInfo}>
                         <Text style={[styles.venueName, { color: colors.textPrimary }]}>{v.venueName}</Text>
                         <View style={styles.venueStats}>
-                          <Text style={[styles.venueCount, { color: colors.textSecondary }]}>{v.bookingCount} bookings</Text>
+                          <Text style={[styles.venueCount, { color: colors.textSecondary }]}>{v.bookingCount} {t("bookings")}</Text>
                           <Text style={[styles.venueRevenue, { color: colors.primary }]}>
                             ₹{Number(v.revenue).toLocaleString("en-IN")}
                           </Text>
@@ -273,12 +273,12 @@ export default function ReportsScreen() {
 
             {summary.byEmployee.length > 0 && (
               <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>By Employee</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{t("byEmployee")}</Text>
                 {summary.byEmployee.map((e) => (
                   <View key={e.userId} style={styles.venueRow}>
                     <Text style={[styles.venueName, { color: colors.textPrimary }]}>{e.userName}</Text>
                     <View style={styles.venueStats}>
-                      <Text style={[styles.venueCount, { color: colors.textSecondary }]}>{e.bookingCount} bookings</Text>
+                      <Text style={[styles.venueCount, { color: colors.textSecondary }]}>{e.bookingCount} {t("bookings")}</Text>
                       <Text style={[styles.venueRevenue, { color: colors.primary }]}>
                         ₹{Number(e.revenue).toLocaleString("en-IN")}
                       </Text>
@@ -293,7 +293,7 @@ export default function ReportsScreen() {
         {bookingsLoading ? null : (
           <View style={styles.bookingListSection}>
             <Text style={[styles.sectionTitle2, { color: colors.textSecondary }]}>
-              Bookings ({bookingsData?.bookings?.length ?? 0})
+              {t("reportBookings")} ({bookingsData?.bookings?.length ?? 0})
             </Text>
             {(bookingsData?.bookings ?? []).map((b) => (
               <BookingCard
@@ -305,6 +305,13 @@ export default function ReportsScreen() {
           </View>
         )}
       </ScrollView>
+      <CalendarPicker
+        visible={showCalendar}
+        fromDate={customFrom}
+        toDate={customTo}
+        onSelect={(from, to) => { setCustomFrom(from); setCustomTo(to); }}
+        onClose={() => setShowCalendar(false)}
+      />
     </View>
   );
 }
@@ -360,6 +367,8 @@ const styles = StyleSheet.create({
   presetText: { fontSize: 11, fontWeight: "600" as const },
   customDateRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
   customDateInput: { flex: 1, borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14 },
+  calendarBtn: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1.5, marginBottom: 16 },
+  calendarBtnText: { fontSize: 14, fontWeight: "600" },
   exportRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
   exportBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
   exportBtnText: { fontWeight: "700" as const, fontSize: 13 },

@@ -2,27 +2,33 @@ import { Router } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, settingsTable } from "@workspace/db";
 import { requireAdmin, requireAuth } from "../middlewares/auth.js";
-import { uploadToBucket, downloadFromBucket } from "../lib/supabase-storage.js";
+import { uploadToBucket, downloadFromBucket } from "../lib/r2-storage.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
 router.get("/settings", requireAuth, async (req, res) => {
-  const settings = await db.select().from(settingsTable).where(eq(settingsTable.adminId, req.user!.adminId));
-  const obj: Record<string, string> = {};
-  for (const s of settings) {
-    obj[s.key] = s.value;
+  try {
+    const settings = await db.select().from(settingsTable).where(eq(settingsTable.adminId, req.user!.adminId));
+    const obj: Record<string, string> = {};
+    for (const s of settings) {
+      obj[s.key] = s.value;
+    }
+    res.json({
+      default_duration_hours: obj["default_duration_hours"] ?? "4",
+      session_timeout_hours: obj["session_timeout_hours"] ?? "24",
+      rules_pdf_path: obj["rules_pdf_path"] ?? "",
+      biz_name: obj["biz_name"] ?? "",
+      biz_tagline: obj["biz_tagline"] ?? "",
+      biz_address: obj["biz_address"] ?? "",
+      biz_phone: obj["biz_phone"] ?? "",
+      biz_email: obj["biz_email"] ?? "",
+      biz_gst: obj["biz_gst"] ?? "",
+    });
+  } catch (err) {
+    logger.error({ err }, "GET /settings error");
+    res.status(500).json({ error: "Internal Server Error" });
   }
-  res.json({
-    default_duration_hours: obj["default_duration_hours"] ?? "4",
-    session_timeout_hours: obj["session_timeout_hours"] ?? "24",
-    rules_pdf_path: obj["rules_pdf_path"] ?? "",
-    biz_name: obj["biz_name"] ?? "",
-    biz_tagline: obj["biz_tagline"] ?? "",
-    biz_address: obj["biz_address"] ?? "",
-    biz_phone: obj["biz_phone"] ?? "",
-    biz_email: obj["biz_email"] ?? "",
-    biz_gst: obj["biz_gst"] ?? "",
-  });
 });
 
 const ALLOWED_SETTINGS_KEYS = new Set([
@@ -31,38 +37,43 @@ const ALLOWED_SETTINGS_KEYS = new Set([
 ]);
 
 router.put("/settings", requireAdmin, async (req, res) => {
-  const updates = req.body as Record<string, string>;
-  const unknownKeys = Object.keys(updates).filter((k) => !ALLOWED_SETTINGS_KEYS.has(k));
-  if (unknownKeys.length > 0) {
-    res.status(400).json({ error: "Bad Request", message: `Unknown settings keys: ${unknownKeys.join(", ")}` });
-    return;
+  try {
+    const updates = req.body as Record<string, string>;
+    const unknownKeys = Object.keys(updates).filter((k) => !ALLOWED_SETTINGS_KEYS.has(k));
+    if (unknownKeys.length > 0) {
+      res.status(400).json({ error: "Bad Request", message: `Unknown settings keys: ${unknownKeys.join(", ")}` });
+      return;
+    }
+    for (const [key, value] of Object.entries(updates)) {
+      if (!ALLOWED_SETTINGS_KEYS.has(key)) continue;
+      await db
+        .insert(settingsTable)
+        .values({ key, value: String(value), adminId: req.user!.adminId })
+        .onConflictDoUpdate({
+          target: [settingsTable.adminId, settingsTable.key],
+          set: { value: String(value), updatedAt: new Date() },
+        });
+    }
+    const settings = await db.select().from(settingsTable).where(eq(settingsTable.adminId, req.user!.adminId));
+    const obj: Record<string, string> = {};
+    for (const s of settings) {
+      obj[s.key] = s.value;
+    }
+    res.json({
+      default_duration_hours: obj["default_duration_hours"] ?? "4",
+      session_timeout_hours: obj["session_timeout_hours"] ?? "24",
+      rules_pdf_path: obj["rules_pdf_path"] ?? "",
+      biz_name: obj["biz_name"] ?? "",
+      biz_tagline: obj["biz_tagline"] ?? "",
+      biz_address: obj["biz_address"] ?? "",
+      biz_phone: obj["biz_phone"] ?? "",
+      biz_email: obj["biz_email"] ?? "",
+      biz_gst: obj["biz_gst"] ?? "",
+    });
+  } catch (err) {
+    logger.error({ err }, "PUT /settings error");
+    res.status(500).json({ error: "Internal Server Error" });
   }
-  for (const [key, value] of Object.entries(updates)) {
-    if (!ALLOWED_SETTINGS_KEYS.has(key)) continue;
-    await db
-      .insert(settingsTable)
-      .values({ key, value: String(value), adminId: req.user!.adminId })
-      .onConflictDoUpdate({
-        target: [settingsTable.adminId, settingsTable.key],
-        set: { value: String(value), updatedAt: new Date() },
-      });
-  }
-  const settings = await db.select().from(settingsTable).where(eq(settingsTable.adminId, req.user!.adminId));
-  const obj: Record<string, string> = {};
-  for (const s of settings) {
-    obj[s.key] = s.value;
-  }
-  res.json({
-    default_duration_hours: obj["default_duration_hours"] ?? "4",
-    session_timeout_hours: obj["session_timeout_hours"] ?? "24",
-    rules_pdf_path: obj["rules_pdf_path"] ?? "",
-    biz_name: obj["biz_name"] ?? "",
-    biz_tagline: obj["biz_tagline"] ?? "",
-    biz_address: obj["biz_address"] ?? "",
-    biz_phone: obj["biz_phone"] ?? "",
-    biz_email: obj["biz_email"] ?? "",
-    biz_gst: obj["biz_gst"] ?? "",
-  });
 });
 
 router.post("/settings/rules-pdf", requireAdmin, async (req, res) => {

@@ -3,12 +3,13 @@ import { eq, and } from "drizzle-orm";
 import { db, venuesTable } from "@workspace/db";
 import { firstString } from "../lib/express-utils.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
 router.get("/venues", requireAuth, async (req, res) => {
   try {
-    console.log(`!!! FETCH VENUES - User: ${req.user?.email}, AdminId: ${req.user?.adminId}`);
+    logger.info({ email: req.user?.email, adminId: req.user?.adminId }, "GET /venues");
     
     // Admins see all venues by default; others see only active ones unless 'all=true'
     const isAdmin = req.user?.role === "admin";
@@ -31,17 +32,17 @@ router.get("/venues", requireAuth, async (req, res) => {
       }))
     );
   } catch (err) {
-    console.error("GET /venues error:", err);
+    logger.error({ err }, "GET /venues error");
     res.status(500).json({ error: "Failed to fetch venues" });
   }
 });
 
 router.post("/venues", requireAdmin, async (req, res) => {
   try {
-    console.log(`!!! CREATE VENUE - User: ${req.user?.email}, AdminId: ${req.user?.adminId}`);
+    logger.info({ email: req.user?.email, adminId: req.user?.adminId }, "POST /venues");
     
     if (!req.user?.adminId) {
-      console.error("CRITICAL: Missing adminId in request context!");
+      logger.error({}, "CRITICAL: Missing adminId in request context!");
       res.status(403).json({ error: "Access Denied", message: "Your account is not linked to a Mahal Admin. Please log out and back in." });
       return;
     }
@@ -70,14 +71,14 @@ router.post("/venues", requireAdmin, async (req, res) => {
       pricePerHour: Number(newVenue.pricePerHour),
     });
   } catch (err) {
-    console.error("POST /venues error:", err);
+    logger.error({ err }, "POST /venues error");
     res.status(500).json({ error: "Failed to create venue", message: err instanceof Error ? err.message : "Database error" });
   }
 });
 
 router.put("/venues/:id", requireAdmin, async (req, res) => {
   try {
-    console.log(`!!! UPDATE VENUE - User: ${req.user?.email}, AdminId: ${req.user?.adminId}`);
+    logger.info({ email: req.user?.email, adminId: req.user?.adminId }, "PUT /venues/:id");
     const id = firstString(req.params.id);
     const { name, type, venueCategory, amenities, colorTag, pricePerHour, displayOrder, isActive } = req.body;
 
@@ -110,7 +111,7 @@ router.put("/venues/:id", requireAdmin, async (req, res) => {
       pricePerHour: Number(updatedVenue.pricePerHour),
     });
   } catch (err) {
-    console.error("PUT /venues/:id error:", err);
+    logger.error({ err }, "PUT /venues/:id error");
     res.status(500).json({ error: "Failed to update venue" });
   }
 });
@@ -146,14 +147,14 @@ router.put("/venues/:id/price", requireAdmin, async (req, res) => {
       pricePerHour: Number(venue.pricePerHour),
     });
   } catch (err) {
-    console.error("PUT /venues/:id/price error:", err);
+    logger.error({ err }, "PUT /venues/:id/price error");
     res.status(500).json({ error: "Failed to update price" });
   }
 });
 
 router.delete("/venues/:id", requireAdmin, async (req, res) => {
   try {
-    console.log(`!!! DELETE VENUE - User: ${req.user?.email}, AdminId: ${req.user?.adminId}`);
+    logger.info({ email: req.user?.email, adminId: req.user?.adminId }, "DELETE /venues/:id");
     const id = firstString(req.params.id);
 
     if (!id) {
@@ -174,7 +175,7 @@ router.delete("/venues/:id", requireAdmin, async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error("DELETE /venues/:id error:", err);
+    logger.error({ err }, "DELETE /venues/:id error");
     res.status(500).json({ error: "Failed to delete venue" });
   }
 });

@@ -12,6 +12,7 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/context/LanguageContext";
 import type { Booking } from "@workspace/api-client-react";
 
 interface BookingCardProps {
@@ -31,12 +32,12 @@ function getStatusColor(
   return colors.warning;
 }
 
-function getStatusLabel(status: string, bookingDate: string): string {
-  if (status === "cancelled") return "Cancelled";
-  if (status === "completed") return "Completed";
+function getStatusLabel(status: string, bookingDate: string, t: (key: any) => string): string {
+  if (status === "cancelled") return t("cancelled");
+  if (status === "completed") return t("completed");
   const today = new Date().toISOString().split("T")[0]!;
-  if (bookingDate === today) return "Today";
-  return "Confirmed";
+  if (bookingDate === today) return t("today");
+  return t("confirmed");
 }
 
 function formatTime(t: string): string {
@@ -56,10 +57,11 @@ function formatAmount(amount: number): string {
 
 export default React.memo(function BookingCard({ booking, onPress }: BookingCardProps) {
   const colors = useColors();
+  const { t } = useLanguage();
   const scale = useSharedValue(1);
 
   const statusColor = getStatusColor(booking.status, booking.bookingDate, colors);
-  const statusLabel = getStatusLabel(booking.status, booking.bookingDate);
+  const statusLabel = getStatusLabel(booking.status, booking.bookingDate, t);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -102,7 +104,7 @@ export default React.memo(function BookingCard({ booking, onPress }: BookingCard
               style={[styles.venueName, { color: colors.textSecondary }]}
               numberOfLines={1}
             >
-              {venueName || "No venue"}
+              {venueName || t("noVenue")}
             </Text>
           </View>
           <View style={[styles.badge, { backgroundColor: statusColor + "22" }]}>

@@ -25,4 +25,6 @@ pool.query(`
   console.error("Failed to run auto-migrations:", err);
 });
 
+export { amenityBillsTable } from "./schema";
+export type { AmenityBill } from "./schema";
 export * from "./schema";

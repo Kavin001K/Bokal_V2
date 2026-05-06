@@ -4,27 +4,16 @@ import { Feather } from "@expo/vector-icons";
 import { useGetBookings, useGetSettings, useGetVenues } from "@workspace/api-client-react";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   View,
-  Dimensions,
 } from "react-native";
-import Animated, { 
-  FadeInDown, 
-  FadeInRight, 
-  Layout, 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withRepeat, 
-  withTiming, 
-  withSequence 
-} from "react-native-reanimated";
+import { Animated as RNAnimated } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -35,13 +24,39 @@ import { gregorianToTamil, todayStr, tomorrowStr } from "@/utils/tamilCalendar";
 import type { Booking } from "@workspace/api-client-react";
 import { LinearGradient } from "expo-linear-gradient";
 
-const { width } = Dimensions.get("window");
+// Uses React Native Animated (not Reanimated) to avoid conflicts with
+// children that have Reanimated shared-value styles (BookingCard, AnimatedButton).
+const FadeInItem = React.memo(function FadeInItem({
+  children,
+  delay = 0,
+  style,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  style?: any;
+}) {
+  const opacity = useRef(new RNAnimated.Value(0)).current;
+  const translateY = useRef(new RNAnimated.Value(15)).current;
 
-function getGreeting(): string {
+  useEffect(() => {
+    RNAnimated.parallel([
+      RNAnimated.timing(opacity, { toValue: 1, duration: 400, delay, useNativeDriver: true }),
+      RNAnimated.timing(translateY, { toValue: 0, duration: 400, delay, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  return (
+    <RNAnimated.View style={[style, { opacity, transform: [{ translateY }] }]}>
+      {children}
+    </RNAnimated.View>
+  );
+});
+
+function getGreeting(t: (key: any) => string): string {
   const h = new Date().getHours();
-  if (h < 12) return "Good Morning";
-  if (h < 17) return "Good Afternoon";
-  return "Good Evening";
+  if (h < 12) return t("goodMorning");
+  if (h < 17) return t("goodAfternoon");
+  return t("goodEvening");
 }
 
 export default function HomeScreen() {
@@ -107,21 +122,6 @@ export default function HomeScreen() {
     .filter(b => b.status === 'confirmed' || b.status === 'completed')
     .reduce((acc, b) => acc + Number(b.totalAmount), 0);
 
-  // Pulse animation for the "Free" status
-  const pulse = useSharedValue(1);
-  useEffect(() => {
-    pulse.value = withRepeat(
-      withSequence(withTiming(1.2, { duration: 1000 }), withTiming(1, { duration: 1000 })),
-      -1,
-      true
-    );
-  }, []);
-
-  const pulseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulse.value }],
-    opacity: 0.8,
-  }));
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Premium Header */}
@@ -153,7 +153,7 @@ export default function HomeScreen() {
         }
       >
         {/* Dynamic Hero Card */}
-        <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.heroWrap}>
+        <FadeInItem delay={100} style={styles.heroWrap}>
           <LinearGradient
             colors={[colors.primary, '#A64920']}
             start={{ x: 0, y: 0 }}
@@ -162,13 +162,13 @@ export default function HomeScreen() {
           >
             <View style={styles.heroContent}>
               <View>
-                <Text style={styles.greeting}>{getGreeting()}, {user?.fullName?.split(" ")[0]} 👋</Text>
+                <Text style={styles.greeting}>{getGreeting(t)}, {user?.fullName?.split(" ")[0]} 👋</Text>
                 <Text style={styles.heroDate}>{tamilToday.display}</Text>
               </View>
               <Feather name="calendar" size={32} color="rgba(255,255,255,0.3)" />
             </View>
           </LinearGradient>
-        </Animated.View>
+        </FadeInItem>
 
         {/* Quick Stats Strip (Horizontal) */}
         <ScrollView 
@@ -176,29 +176,29 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false} 
           contentContainerStyle={styles.statsStrip}
         >
-          <Animated.View entering={FadeInRight.delay(200)} style={[styles.statPill, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '20' }]}>
+          <FadeInItem delay={200} style={[styles.statPill, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '20' }]}>
             <Feather name="trending-up" size={14} color={colors.primary} />
             <Text style={[styles.pillValue, { color: colors.primary }]}>₹{todayRevenue.toLocaleString('en-IN')}</Text>
             <Text style={[styles.pillLabel, { color: colors.textMuted }]}>{t("revenue")}</Text>
-          </Animated.View>
+          </FadeInItem>
 
-          <Animated.View entering={FadeInRight.delay(300)} style={[styles.statPill, { backgroundColor: hallsFree > 0 ? '#10B98110' : '#EF444410', borderColor: hallsFree > 0 ? '#10B98120' : '#EF444420' }]}>
+          <FadeInItem delay={300} style={[styles.statPill, { backgroundColor: hallsFree > 0 ? '#10B98110' : '#EF444410', borderColor: hallsFree > 0 ? '#10B98120' : '#EF444420' }]}>
             <View style={[styles.miniPulse, { backgroundColor: hallsFree > 0 ? '#10B981' : '#EF4444' }]} />
             <Text style={[styles.pillValue, { color: hallsFree > 0 ? '#10B981' : '#EF4444' }]}>{hallsBooked}/{totalHalls}</Text>
             <Text style={[styles.pillLabel, { color: colors.textMuted }]}>{t("halls")}</Text>
-          </Animated.View>
+          </FadeInItem>
 
-          <Animated.View entering={FadeInRight.delay(400)} style={[styles.statPill, { backgroundColor: '#3B82F610', borderColor: '#3B82F620' }]}>
+          <FadeInItem delay={400} style={[styles.statPill, { backgroundColor: '#3B82F610', borderColor: '#3B82F620' }]}>
             <Feather name="home" size={14} color="#3B82F6" />
             <Text style={[styles.pillValue, { color: '#3B82F6' }]}>{roomsBooked}/{totalRooms} {t("booked")}</Text>
             <Text style={[styles.pillLabel, { color: colors.textMuted }]}>{t("rooms")}</Text>
-          </Animated.View>
+          </FadeInItem>
 
-          <Animated.View entering={FadeInRight.delay(500)} style={[styles.statPill, { backgroundColor: colors.textMuted + '10', borderColor: colors.textMuted + '20' }]}>
+          <FadeInItem delay={500} style={[styles.statPill, { backgroundColor: colors.textMuted + '10', borderColor: colors.textMuted + '20' }]}>
             <Feather name="check-circle" size={14} color={colors.textSecondary} />
-            <Text style={[styles.pillValue, { color: colors.textSecondary }]}>{totalToday} Total</Text>
+            <Text style={[styles.pillValue, { color: colors.textSecondary }]}>{totalToday} {t("total")}</Text>
             <Text style={[styles.pillLabel, { color: colors.textMuted }]}>{t("bookings")}</Text>
-          </Animated.View>
+          </FadeInItem>
         </ScrollView>
         {activeVenues.length === 0 ? (
           <View style={[styles.emptyFeed, { marginTop: 20 }]}>
@@ -213,11 +213,11 @@ export default function HomeScreen() {
         ) : null}
 
         {/* Smart Search */}
-        <Animated.View entering={FadeInDown.delay(600).springify()} style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <FadeInItem delay={600} style={[styles.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Feather name="search" size={18} color={colors.textMuted} />
           <TextInput
             style={[styles.searchInput, { color: colors.textPrimary }]}
-            placeholder="Search by name or phone..."
+            placeholder={t("searchPlaceholder")}
             placeholderTextColor={colors.textMuted}
             value={search}
             onChangeText={(t) => {
@@ -225,14 +225,14 @@ export default function HomeScreen() {
               setSearch(t);
             }}
           />
-        </Animated.View>
+        </FadeInItem>
 
         {/* Bookings Feed */}
         <View style={styles.feed}>
           {/* TODAY */}
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              {search ? 'Search Results' : "Today's Schedule"}
+              {search ? t("searchResults") : t("todaysSchedule")}
             </Text>
             {todayBookings.length > 0 && (
               <Text style={[styles.countBadge, { backgroundColor: colors.primary + '15', color: colors.primary }]}>
@@ -258,26 +258,26 @@ export default function HomeScreen() {
               ))}
             </View>
           ) : todayBookings.length === 0 && !search && upcomingBookings.length === 0 && pastBookings.length === 0 ? (
-            <Animated.View entering={FadeInDown} style={styles.emptyFeed}>
+            <FadeInItem style={styles.emptyFeed}>
               <View style={[styles.emptyIconCircle, { backgroundColor: colors.border + '30' }]}>
                 <Feather name="calendar" size={32} color={colors.textMuted} />
               </View>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No bookings found</Text>
-              <AnimatedButton 
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t("noBookingsFound")}</Text>
+              <AnimatedButton
                 onPress={() => router.push('/new-booking')}
                 style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
               >
-                <Text style={styles.emptyBtnText}>Create Booking</Text>
+                <Text style={styles.emptyBtnText}>{t("createBooking")}</Text>
               </AnimatedButton>
-            </Animated.View>
+            </FadeInItem>
           ) : (
             todayBookings.map((b, idx) => (
-              <Animated.View key={b.id} entering={FadeInDown.delay(100 * idx)}>
+              <FadeInItem key={b.id} delay={100 * idx}>
                 <BookingCard
                   booking={b}
                   onPress={() => router.push(`/booking/${b.id}`)}
                 />
-              </Animated.View>
+              </FadeInItem>
             ))
           )}
 
@@ -285,18 +285,18 @@ export default function HomeScreen() {
           {tomorrowBookings.length > 0 && !search && (
             <>
               <View style={[styles.sectionHeader, { marginTop: 32 }]}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Tomorrow</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{t("tomorrow")}</Text>
                 <Text style={[styles.countBadge, { backgroundColor: colors.secondary, color: colors.textSecondary }]}>
                   {tomorrowBookings.length}
                 </Text>
               </View>
               {tomorrowBookings.map((b, idx) => (
-                <Animated.View key={b.id} entering={FadeInDown.delay(50 * idx)}>
+                <FadeInItem key={b.id} delay={50 * idx}>
                   <BookingCard
                     booking={b}
                     onPress={() => router.push(`/booking/${b.id}`)}
                   />
-                </Animated.View>
+                </FadeInItem>
               ))}
             </>
           )}
@@ -305,15 +305,15 @@ export default function HomeScreen() {
           {upcomingBookings.length > 0 && !search && (
             <>
               <View style={[styles.sectionHeader, { marginTop: 32 }]}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Upcoming Bookings</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{t("upcomingBookings")}</Text>
               </View>
               {upcomingBookings.map((b, idx) => (
-                <Animated.View key={b.id} entering={FadeInDown.delay(50 * idx)}>
+                <FadeInItem key={b.id} delay={50 * idx}>
                   <BookingCard
                     booking={b}
                     onPress={() => router.push(`/booking/${b.id}`)}
                   />
-                </Animated.View>
+                </FadeInItem>
               ))}
             </>
           )}
@@ -323,16 +323,16 @@ export default function HomeScreen() {
             <>
               <View style={[styles.sectionHeader, { marginTop: 40 }]}>
                 <View style={styles.pastHeaderLine} />
-                <Text style={[styles.sectionTitle, { color: colors.textMuted, fontSize: 14 }]}>Past History</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textMuted, fontSize: 14 }]}>{t("pastHistory")}</Text>
                 <View style={styles.pastHeaderLine} />
               </View>
               {pastBookings.slice(0, 20).map((b, idx) => (
-                <Animated.View key={b.id} entering={FadeInDown.delay(30 * idx)} style={{ opacity: 0.8 }}>
+                <FadeInItem key={b.id} delay={30 * idx} style={{ opacity: 0.8 }}>
                   <BookingCard
                     booking={b}
                     onPress={() => router.push(`/booking/${b.id}`)}
                   />
-                </Animated.View>
+                </FadeInItem>
               ))}
             </>
           )}
@@ -348,21 +348,21 @@ export default function HomeScreen() {
           </View>
           <AnimatedButton style={styles.menuItem} onPress={() => { setShowProfileMenu(false); router.push("/edit-profile"); }}>
             <Feather name="user" size={16} color={colors.textSecondary} />
-            <Text style={[styles.menuItemText, { color: colors.textSecondary }]}>My Profile</Text>
+            <Text style={[styles.menuItemText, { color: colors.textSecondary }]}>{t("myProfile")}</Text>
           </AnimatedButton>
           <AnimatedButton
             style={[styles.menuItem, styles.logoutItem]}
             onPress={async () => { setShowProfileMenu(false); await logout(); router.replace("/login"); }}
           >
             <Feather name="log-out" size={16} color={colors.destructive} />
-            <Text style={[styles.menuItemText, { color: colors.destructive }]}>Logout</Text>
+            <Text style={[styles.menuItemText, { color: colors.destructive }]}>{t("logout")}</Text>
           </AnimatedButton>
         </View>
       )}
       {showProfileMenu && <Pressable style={styles.menuOverlay} onPress={() => setShowProfileMenu(false)} />}
 
       {/* Floating Action Button - Raised for visibility */}
-      <Animated.View entering={FadeInDown.delay(800).springify()} style={[styles.fabWrap, { bottom: insets.bottom + 80 }]}>
+      <FadeInItem delay={800} style={[styles.fabWrap, { bottom: insets.bottom + 80 }]}>
         <AnimatedButton
           style={[styles.fab, { backgroundColor: colors.primary }]}
           onPress={() => {
@@ -372,7 +372,7 @@ export default function HomeScreen() {
         >
           <Feather name="plus" size={32} color="#fff" />
         </AnimatedButton>
-      </Animated.View>
+      </FadeInItem>
     </View>
   );
 }

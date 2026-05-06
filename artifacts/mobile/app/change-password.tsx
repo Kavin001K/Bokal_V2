@@ -17,11 +17,13 @@ import { ActivityIndicator,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function ChangePasswordScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
+  const { t } = useLanguage();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -43,15 +45,15 @@ export default function ChangePasswordScreen() {
         }, 1500);
       },
       onError: (err: { data?: { message?: string } }) => {
-        setError(err?.data?.message ?? "Failed to change password");
+        setError(err?.data?.message ?? t("updateFailed"));
       },
     },
   });
 
   const handleSubmit = () => {
     setError("");
-    if (next.length < 6) { setError("New password must be at least 6 characters"); return; }
-    if (next !== confirm) { setError("Passwords do not match"); return; }
+    if (next.length < 6) { setError(t("passwordMinLength")); return; }
+    if (next !== confirm) { setError(t("passwordsDontMatch")); return; }
     mutation.mutate({ data: { currentPassword: current, newPassword: next } });
   };
 
@@ -73,7 +75,7 @@ export default function ChangePasswordScreen() {
         >
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Change Password</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{t("changePasswordTitle")}</Text>
         <View style={{ width: 22 }} />
       </View>
 
@@ -84,7 +86,7 @@ export default function ChangePasswordScreen() {
         {success && (
           <View style={[styles.successBox, { backgroundColor: colors.success + "20" }]}>
             <Feather name="check-circle" size={16} color={colors.success} />
-            <Text style={[styles.successText, { color: colors.success }]}>Password changed successfully!</Text>
+            <Text style={[styles.successText, { color: colors.success }]}>{t("passwordChangedMsg")}</Text>
           </View>
         )}
 
@@ -92,14 +94,14 @@ export default function ChangePasswordScreen() {
           <View style={[styles.warningBox, { backgroundColor: colors.warning + "30" }]}>
             <Feather name="alert-triangle" size={16} color={colors.textPrimary} />
             <Text style={[styles.warningText, { color: colors.textPrimary }]}>
-              You must change your password before continuing.
+              {t("mustChangePasswordMsg")}
             </Text>
           </View>
         )}
 
         {!user?.mustChangePw && (
           <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSecondary }]}>Current Password</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>{t("currentPassword")}</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.textPrimary }]}
               placeholder="••••••••"
@@ -112,7 +114,7 @@ export default function ChangePasswordScreen() {
         )}
 
         <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>New Password</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>{t("newPassword")}</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.textPrimary }]}
             placeholder="Min 6 characters"
@@ -124,7 +126,7 @@ export default function ChangePasswordScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Confirm New Password</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>{t("confirmNewPassword")}</Text>
           <TextInput
             style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.textPrimary }]}
             placeholder="Repeat new password"
@@ -150,7 +152,7 @@ export default function ChangePasswordScreen() {
           {mutation.isPending ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.btnText}>Update Password</Text>
+            <Text style={styles.btnText}>{t("updatePassword")}</Text>
           )}
         </AnimatedButton>
       </ScrollView>

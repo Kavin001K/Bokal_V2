@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken, type JwtPayload } from "../lib/auth.js";
+import { logger } from "../lib/logger.js";
 
 declare global {
   namespace Express {
@@ -29,11 +30,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     const decoded = verifyToken(token);
 
     // X-RAY LOG: Verify what's inside the token
-    console.log(`!!! AUTH GATE - User: ${decoded.email}, AdminId: ${decoded.adminId}, Role: ${decoded.role}`);
+    logger.info({ email: decoded.email, adminId: decoded.adminId, role: decoded.role }, "Auth gate");
 
     // FAIL HARD if adminId is missing in the token (Multi-tenant requirement)
     if (!decoded.adminId) {
-       console.error(`!!! SECURITY ALERT: User ${decoded.email} logged in without AdminId context. Forcing Logout.`);
+       logger.error({ email: decoded.email }, "Security alert: missing adminId");
        res.status(401).json({ error: "Unauthorized", message: "Session invalid (missing Mahal context). Please log out and back in." });
        return;
     }

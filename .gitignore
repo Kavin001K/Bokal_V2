@@ -48,6 +48,9 @@ Thumbs.db
 .cache/
 .local/
 
+# Claude Code
+.claude/
+
 # Environment secrets
 .env
 .env.local

@@ -50,13 +50,13 @@ export async function seedIfEmpty() {
       }
 
       if (process.env["FORCE_ADMIN_PASSWORD_RESET"]?.toLowerCase() === "true" && DEFAULT_ADMIN_PASSWORD) {
-        console.log("!!! FORCING ADMIN PASSWORD RESET");
+        logger.warn("Forcing admin password reset");
         const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 12);
         await db
           .update(usersTable)
           .set({ passwordHash, mustChangePw: false, isActive: true })
           .where(eq(usersTable.email, DEFAULT_ADMIN_EMAIL));
-        console.log("!!! ADMIN PASSWORD RESET SUCCESSFUL");
+        logger.info("Admin password reset successful");
       }
 
       logger.info({ email: DEFAULT_ADMIN_EMAIL }, "Admin user already exists");

@@ -212,3 +212,28 @@ export const insertBookingPdfSchema = createInsertSchema(bookingPdfsTable).omit(
 });
 export type InsertBookingPdf = z.infer<typeof insertBookingPdfSchema>;
 export type BookingPdf = typeof bookingPdfsTable.$inferSelect;
+
+export const amenityBillsTable = pgTable("amenity_bills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bookingId: uuid("booking_id")
+    .notNull()
+    .references(() => bookingsTable.id, { onDelete: "cascade" }),
+  adminId: uuid("admin_id")
+    .notNull()
+    .references(() => usersTable.id),
+  items: jsonb("items").notNull().default("[]"),
+  totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  isPaid: boolean("is_paid").notNull().default(false),
+  paidAt: timestamp("paid_at"),
+  notes: text("notes"),
+  createdById: uuid("created_by_id")
+    .notNull()
+    .references(() => usersTable.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  bookingIdIdx: index("idx_amenity_bills_booking").on(table.bookingId),
+  adminIdIdx: index("idx_amenity_bills_admin").on(table.adminId),
+}));
+
+export type AmenityBill = typeof amenityBillsTable.$inferSelect;

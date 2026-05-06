@@ -6,6 +6,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
+import { TextInput as RNTextInput } from "react-native";
 import {
   Animated,
   KeyboardAvoidingView,
@@ -27,12 +28,13 @@ import { AnimatedLock } from "@/components/AnimatedLock";
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
-  const { language, setLanguage, t } = useLanguage();
+  const { language, isReady, setLanguage, t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [postLoginData, setPostLoginData] = useState<any | null>(null);
+  const passwordRef = useRef<RNTextInput>(null);
 
   // Entrance animations
   const isWeb = Platform.OS === "web";
@@ -66,7 +68,12 @@ export default function LoginScreen() {
   const loginMutation = useLogin({
     mutation: {
       onSuccess: async (data) => {
-        if (!language) {
+        if (!data || typeof data !== "object" || !data.user || !data.token) {
+          setError(t("unexpectedResponse"));
+          return;
+        }
+        // Show language picker only when language has never been set (truly first login)
+        if (isReady && !language) {
           setPostLoginData(data);
           return;
         }
@@ -79,13 +86,12 @@ export default function LoginScreen() {
       },
       onError: (err: any) => {
         const msg = err.message || "";
-        const targetUrl = err.url || "unknown URL";
         if (msg.includes("Failed to fetch") || msg.includes("Network request failed")) {
-          setError(`Network error: Unable to connect to ${targetUrl}. Check your internet.`);
+          setError(t("networkError"));
         } else if (msg.includes("aborted") || err.name === "AbortError") {
-          setError("Connection timed out. Server may be unreachable. Please try again.");
+          setError(t("connectionTimedOut"));
         } else {
-          setError(err?.data?.message || err.message || "An unexpected error occurred");
+          setError(err?.data?.message || err.message || t("unexpectedError"));
         }
       },
     },
@@ -94,14 +100,14 @@ export default function LoginScreen() {
   const handleLogin = () => {
     setError("");
     if (!email.trim() || !password.trim()) {
-      setError("Please enter email and password");
+      setError(t("pleaseEnterEmailPassword"));
       return;
     }
     loginMutation.mutate({ data: { email: email.trim().toLowerCase(), password } });
   };
 
   const handleLanguageChoice = async (selected: "en" | "ta") => {
-    if (!postLoginData) return;
+    if (!postLoginData || !postLoginData.user) return;
     await setLanguage(selected);
     await login(postLoginData.token, postLoginData.user, (postLoginData as any).refreshToken);
     if (postLoginData.user.mustChangePw) {
@@ -146,16 +152,16 @@ export default function LoginScreen() {
           </Animated.View>
 
           <Animated.View style={[styles.card, { opacity: cardAnim, transform: [{ translateY: cardSlide }] }]}>
-            <Text style={styles.welcomeText}>Welcome back</Text>
-            <Text style={styles.subText}>Sign in to continue</Text>
+            <Text style={styles.welcomeText}>{t("welcomeBack")}</Text>
+            <Text style={styles.subText}>{t("signInToContinue")}</Text>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>{t("email")}</Text>
               <View style={[styles.inputRow, error ? styles.inputRowError : null]}>
                 <Feather name="mail" size={16} color="#A89080" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter your email"
+                  placeholder={t("emailPlaceholder")}
                   placeholderTextColor="#A89080"
                   value={email}
                   onChangeText={(t) => { setEmail(t); setError(""); }}
@@ -163,17 +169,20 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
                 />
               </View>
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={styles.label}>{t("password")}</Text>
               <View style={[styles.inputRow, error ? styles.inputRowError : null]}>
                 <Feather name="lock" size={16} color="#A89080" style={styles.inputIcon} />
                 <TextInput
+                  ref={passwordRef}
                   style={[styles.input, styles.inputFlex]}
-                  placeholder="••••••••"
+                  placeholder={t("passwordPlaceholder")}
                   placeholderTextColor="#A89080"
                   value={password}
                   onChangeText={(t) => { setPassword(t); setError(""); }}
@@ -204,7 +213,7 @@ export default function LoginScreen() {
 
             <Button
               style={styles.loginBtn}
-              label="Sign In"
+              label={t("signIn")}
               icon="log-in"
               loading={loginMutation.isPending}
               onPress={handleLogin}
@@ -212,7 +221,7 @@ export default function LoginScreen() {
             />
           </Animated.View>
 
-          <Text style={styles.version}>Bookal v1.0</Text>
+          <Text style={styles.version}>{t("version")}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
       {postLoginData ? (

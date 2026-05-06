@@ -8,6 +8,7 @@ import { refreshTokensTable } from "@workspace/db/schema";
 import { signToken } from "../lib/auth.js";
 import { firstString } from "../lib/express-utils.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 const loginLimiter = rateLimit({
@@ -97,9 +98,9 @@ router.post("/auth/login", loginLimiter, async (req, res) => {
       },
     });
   } catch (err: any) {
-    console.error("LOGIN ERROR:", err);
-    res.status(500).json({ 
-      error: "Internal Server Error", 
+    logger.error({ err }, "Login error");
+    res.status(500).json({
+      error: "Internal Server Error",
       message: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined
     });
@@ -107,210 +108,235 @@ router.post("/auth/login", loginLimiter, async (req, res) => {
 });
 
 router.post("/auth/refresh", async (req, res) => {
-  const { refreshToken } = req.body as { refreshToken?: string };
-  if (!refreshToken) {
-    res.status(400).json({ error: "Bad Request", message: "Refresh token is required" });
-    return;
-  }
+  try {
+    const { refreshToken } = req.body as { refreshToken?: string };
+    if (!refreshToken) {
+      res.status(400).json({ error: "Bad Request", message: "Refresh token is required" });
+      return;
+    }
 
-  const now = new Date();
-  const tokenRows = await db
-    .select()
-    .from(refreshTokensTable)
-    .where(and(eq(refreshTokensTable.token, refreshToken), gt(refreshTokensTable.expiresAt, now)))
-    .limit(1);
+    const now = new Date();
+    const tokenRows = await db
+      .select()
+      .from(refreshTokensTable)
+      .where(and(eq(refreshTokensTable.token, refreshToken), gt(refreshTokensTable.expiresAt, now)))
+      .limit(1);
 
-  if (!tokenRows[0]) {
-    res.status(401).json({ error: "Unauthorized", message: "Invalid or expired refresh token" });
-    return;
-  }
+    if (!tokenRows[0]) {
+      res.status(401).json({ error: "Unauthorized", message: "Invalid or expired refresh token" });
+      return;
+    }
 
-  const userRows = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, tokenRows[0].userId))
-    .limit(1);
+    const userRows = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, tokenRows[0].userId))
+      .limit(1);
 
-  if (!userRows[0] || !userRows[0].isActive) {
-    await db.delete(refreshTokensTable).where(eq(refreshTokensTable.id, tokenRows[0].id));
-    res.status(401).json({ error: "Unauthorized", message: "User not active" });
-    return;
-  }
+    if (!userRows[0] || !userRows[0].isActive) {
+      await db.delete(refreshTokensTable).where(eq(refreshTokensTable.id, tokenRows[0].id));
+      res.status(401).json({ error: "Unauthorized", message: "User not active" });
+      return;
+    }
 
-  const user = userRows[0];
-  const newAccessToken = signToken({
-    userId: user.id,
-    email: user.email,
-    name: user.fullName,
-    role: user.role,
-    adminId: user.role === "admin" ? user.id : (user.adminId ?? user.id),
-    mustChangePw: user.mustChangePw,
-  });
-  const newRefreshToken = generateRefreshToken();
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
-
-  await db.transaction(async (tx) => {
-    await tx.delete(refreshTokensTable).where(eq(refreshTokensTable.id, tokenRows[0]!.id));
-    await tx.insert(refreshTokensTable).values({
+    const user = userRows[0];
+    const newAccessToken = signToken({
       userId: user.id,
-      token: newRefreshToken,
-      deviceName: tokenRows[0]!.deviceName,
-      expiresAt,
-      lastUsedAt: now,
-    });
-  });
-
-  res.json({
-    token: newAccessToken,
-    refreshToken: newRefreshToken,
-    user: {
-      id: user.id,
-      fullName: user.fullName,
       email: user.email,
+      name: user.fullName,
       role: user.role,
+      adminId: user.role === "admin" ? user.id : (user.adminId ?? user.id),
       mustChangePw: user.mustChangePw,
-    },
-  });
+    });
+    const newRefreshToken = generateRefreshToken();
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+    await db.transaction(async (tx) => {
+      await tx.delete(refreshTokensTable).where(eq(refreshTokensTable.id, tokenRows[0]!.id));
+      await tx.insert(refreshTokensTable).values({
+        userId: user.id,
+        token: newRefreshToken,
+        deviceName: tokenRows[0]!.deviceName,
+        expiresAt,
+        lastUsedAt: now,
+      });
+    });
+
+    res.json({
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        mustChangePw: user.mustChangePw,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "POST /auth/refresh error");
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
 router.post("/auth/change-password", requireAuth, async (req, res) => {
-  const { currentPassword, newPassword } = req.body as {
-    currentPassword?: string;
-    newPassword?: string;
-  };
+  try {
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword?: string;
+      newPassword?: string;
+    };
 
-  if (!newPassword || newPassword.length < 6) {
-    res.status(400).json({ error: "Bad Request", message: "New password must be at least 6 characters" });
-    return;
-  }
-
-  const user = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, req.user!.userId))
-    .limit(1);
-
-  if (!user[0]) {
-    res.status(404).json({ error: "Not Found" });
-    return;
-  }
-
-  // Always require current password UNLESS this is a forced first-login change
-  if (!user[0].mustChangePw) {
-    if (!currentPassword) {
-      res.status(400).json({ error: "Bad Request", message: "Current password is required" });
+    if (!newPassword || newPassword.length < 6) {
+      res.status(400).json({ error: "Bad Request", message: "New password must be at least 6 characters" });
       return;
     }
-    const valid = await bcrypt.compare(currentPassword, user[0].passwordHash);
-    if (!valid) {
-      res.status(400).json({ error: "Bad Request", message: "Current password incorrect" });
+
+    const user = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, req.user!.userId))
+      .limit(1);
+
+    if (!user[0]) {
+      res.status(404).json({ error: "Not Found" });
       return;
     }
+
+    // Always require current password UNLESS this is a forced first-login change
+    if (!user[0].mustChangePw) {
+      if (!currentPassword) {
+        res.status(400).json({ error: "Bad Request", message: "Current password is required" });
+        return;
+      }
+      const valid = await bcrypt.compare(currentPassword, user[0].passwordHash);
+      if (!valid) {
+        res.status(400).json({ error: "Bad Request", message: "Current password incorrect" });
+        return;
+      }
+    }
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await db
+      .update(usersTable)
+      .set({ passwordHash: hash, mustChangePw: false })
+      .where(eq(usersTable.id, user[0].id));
+
+    res.json({ success: true, message: "Password changed successfully" });
+  } catch (err) {
+    logger.error({ err }, "POST /auth/change-password error");
+    res.status(500).json({ error: "Internal Server Error" });
   }
-
-  const hash = await bcrypt.hash(newPassword, 12);
-  await db
-    .update(usersTable)
-    .set({ passwordHash: hash, mustChangePw: false })
-    .where(eq(usersTable.id, user[0].id));
-
-  res.json({ success: true, message: "Password changed successfully" });
 });
 
 router.post("/auth/reset-password/:userId", requireAdmin, async (req, res) => {
-  const userId = firstString(req.params.userId);
-  const { newPassword } = req.body as { newPassword?: string };
+  try {
+    const userId = firstString(req.params.userId);
+    const { newPassword } = req.body as { newPassword?: string };
 
-  if (!userId) {
-    res.status(400).json({ error: "Bad Request", message: "User ID is required" });
-    return;
+    if (!userId) {
+      res.status(400).json({ error: "Bad Request", message: "User ID is required" });
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      res.status(400).json({ error: "Bad Request", message: "New password must be at least 6 characters" });
+      return;
+    }
+
+    const user = await db
+      .select()
+      .from(usersTable)
+      .where(and(eq(usersTable.id, userId!), eq(usersTable.adminId, req.user!.adminId)))
+      .limit(1);
+
+    if (!user[0]) {
+      res.status(404).json({ error: "Not Found", message: "User not found" });
+      return;
+    }
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await db
+      .update(usersTable)
+      .set({ passwordHash: hash, mustChangePw: false })
+      .where(and(eq(usersTable.id, userId!), eq(usersTable.adminId, req.user!.adminId)));
+
+    res.json({ success: true, message: "Password reset successfully. User must change on next login." });
+  } catch (err) {
+    logger.error({ err }, "POST /auth/reset-password/:userId error");
+    res.status(500).json({ error: "Internal Server Error" });
   }
-
-  if (!newPassword || newPassword.length < 6) {
-    res.status(400).json({ error: "Bad Request", message: "New password must be at least 6 characters" });
-    return;
-  }
-
-  const user = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, userId!))
-    .limit(1);
-
-  if (!user[0]) {
-    res.status(404).json({ error: "Not Found", message: "User not found" });
-    return;
-  }
-
-  const hash = await bcrypt.hash(newPassword, 12);
-  await db
-    .update(usersTable)
-    .set({ passwordHash: hash, mustChangePw: false })
-    .where(eq(usersTable.id, userId!));
-
-  res.json({ success: true, message: "Password reset successfully. User must change on next login." });
 });
 router.get("/auth/profile", requireAuth, async (req, res) => {
-  const user = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, req.user!.userId))
-    .limit(1);
+  try {
+    const user = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, req.user!.userId))
+      .limit(1);
 
-  if (!user[0]) {
-    res.status(404).json({ error: "Not Found", message: "User not found" });
-    return;
+    if (!user[0]) {
+      res.status(404).json({ error: "Not Found", message: "User not found" });
+      return;
+    }
+
+    res.json({
+      id: user[0].id,
+      fullName: user[0].fullName,
+      email: user[0].email,
+      phoneNumber: user[0].phoneNumber,
+      dateOfBirth: user[0].dateOfBirth,
+      role: user[0].role,
+    });
+  } catch (err) {
+    logger.error({ err }, "GET /auth/profile error");
+    res.status(500).json({ error: "Internal Server Error" });
   }
-
-  res.json({
-    id: user[0].id,
-    fullName: user[0].fullName,
-    email: user[0].email,
-    phoneNumber: user[0].phoneNumber,
-    dateOfBirth: user[0].dateOfBirth,
-    role: user[0].role,
-  });
 });
 
 router.put("/auth/profile", requireAuth, async (req, res) => {
-  const { fullName, phoneNumber, dateOfBirth } = req.body as {
-    fullName?: string;
-    phoneNumber?: string;
-    dateOfBirth?: string;
-  };
+  try {
+    const { fullName, phoneNumber, dateOfBirth } = req.body as {
+      fullName?: string;
+      phoneNumber?: string;
+      dateOfBirth?: string;
+    };
 
-  const updateData: any = {};
-  if (fullName !== undefined) updateData.fullName = fullName;
-  if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
-  if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
+    const updateData: any = {};
+    if (fullName !== undefined) updateData.fullName = fullName;
+    if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+    if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
 
-  if (Object.keys(updateData).length === 0) {
-    res.status(400).json({ error: "Bad Request", message: "No data to update" });
-    return;
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({ error: "Bad Request", message: "No data to update" });
+      return;
+    }
+
+    const [updated] = await db
+      .update(usersTable)
+      .set(updateData)
+      .where(eq(usersTable.id, req.user!.userId))
+      .returning();
+
+    if (!updated) {
+      res.status(404).json({ error: "Not Found", message: "User not found" });
+      return;
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: updated.id,
+        fullName: updated.fullName,
+        email: updated.email,
+        phoneNumber: updated.phoneNumber,
+        dateOfBirth: updated.dateOfBirth,
+        role: updated.role,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "PUT /auth/profile error");
+    res.status(500).json({ error: "Internal Server Error" });
   }
-
-  const [updated] = await db
-    .update(usersTable)
-    .set(updateData)
-    .where(eq(usersTable.id, req.user!.userId))
-    .returning();
-
-  if (!updated) {
-    res.status(404).json({ error: "Not Found", message: "User not found" });
-    return;
-  }
-
-  res.json({
-    success: true,
-    user: {
-      id: updated.id,
-      fullName: updated.fullName,
-      email: updated.email,
-      phoneNumber: updated.phoneNumber,
-      dateOfBirth: updated.dateOfBirth,
-      role: updated.role,
-    },
-  });
 });
 
 export default router;

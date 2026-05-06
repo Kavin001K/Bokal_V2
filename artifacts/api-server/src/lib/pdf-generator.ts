@@ -28,6 +28,20 @@ export interface ReportPdfData {
   business?: BusinessInfo;
 }
 
+export interface AmenityBillPdfData {
+  billId: string;
+  bookingRef: string;
+  customerName: string;
+  bookingDate: string;
+  items: { name: string; amount: number }[];
+  totalAmount: number;
+  isPaid: boolean;
+  isCancelled?: boolean;
+  notes?: string;
+  createdAt: string;
+  business?: BusinessInfo;
+}
+
 export interface BookingPdfData {
   bookingRef: string;
   customerName: string;
@@ -42,6 +56,7 @@ export interface BookingPdfData {
   totalAmount: string;
   advanceAmount: string;
   isPaid: boolean;
+  isCancelled: boolean;
   notes?: string;
   createdBy: string;
   createdAt: string;
@@ -285,6 +300,20 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
           rotate: degrees(15)
         });
       }
+
+      if (data.isCancelled) {
+        const cancelledText = "CANCELLED";
+        const cw = bold.widthOfTextAtSize(cancelledText, 100);
+        p.drawText(cancelledText, {
+          x: (WIDTH - cw) / 2,
+          y: HEIGHT / 2 - 50,
+          size: 100,
+          font: bold,
+          color: rgb(0.9, 0.1, 0.1),
+          opacity: 0.15,
+          rotate: degrees(30),
+        });
+      }
     };
 
     const drawFooter = (p: PDFPage, pageNum: number) => {
@@ -451,8 +480,8 @@ export async function generateBookingConfirmationPdf(data: BookingPdfData): Prom
     page.drawText("FINANCIAL SUMMARY", { x: MARGIN + 25, y: y - 25, size: 11, font: bold, color: COLORS.PRIMARY });
     
     // Payment Status Badge
-    const statusText = data.isPaid ? "FULLY PAID" : "BALANCE DUE";
-    const statusColor = data.isPaid ? COLORS.SUCCESS : COLORS.ACCENT;
+    const statusText = data.isCancelled ? "CANCELLED" : data.isPaid ? "FULLY PAID" : "BALANCE DUE";
+    const statusColor = data.isCancelled ? rgb(0.9, 0.1, 0.1) : data.isPaid ? COLORS.SUCCESS : COLORS.ACCENT;
     const stW = bold.widthOfTextAtSize(statusText, 8);
     page.drawRectangle({ x: MARGIN + 25, y: y - 42, width: stW + 15, height: 14, color: statusColor, opacity: 0.15 });
     page.drawText(statusText, { x: MARGIN + 32, y: y - 37, size: 8, font: bold, color: statusColor });
@@ -596,6 +625,25 @@ export async function generateProfessionalReportPdf(data: ReportPdfData): Promis
     page.drawText(revLabel, { x: rightEdge - revW, y, size: 10, font: bold, color: COLORS.TEXT_DARK });
   }
 
+  // Revenue by Employee
+  y -= 50;
+  page.drawText("REVENUE BY EMPLOYEE", { x: margin, y, size: 10, font: bold, color: COLORS.PRIMARY });
+  y -= 5;
+  drawLine(page, margin, y, rightEdge, y, 0.5);
+  y -= 18;
+  page.drawText("Employee Name", { x: margin, y, size: 9, font: bold, color: COLORS.TEXT_MUTED });
+  page.drawText("Bookings", { x: margin + 250, y, size: 9, font: bold, color: COLORS.TEXT_MUTED });
+  page.drawText("Revenue", { x: rightEdge - 80, y, size: 9, font: bold, color: COLORS.TEXT_MUTED });
+
+  for (const e of data.byEmployee) {
+    y -= 20;
+    page.drawText(cleanText(e.name), { x: margin, y, size: 10, font: regular, color: COLORS.TEXT_DARK });
+    page.drawText(cleanText(`${e.count}`), { x: margin + 250, y, size: 10, font: regular, color: COLORS.TEXT_DARK });
+    const revLabel = cleanText(`Rs. ${e.revenue}`);
+    const revW = bold.widthOfTextAtSize(revLabel, 10);
+    page.drawText(revLabel, { x: rightEdge - revW, y, size: 10, font: bold, color: COLORS.TEXT_DARK });
+  }
+
   y -= 40;
 
   // Footer
@@ -603,6 +651,186 @@ export async function generateProfessionalReportPdf(data: ReportPdfData): Promis
   page.drawText(`Bookal Executive Report  |  Generated: ${new Date().toISOString().split('T')[0]}`, {
     x: margin, y: 25, size: 8, font: regular, color: COLORS.TEXT_MUTED,
   });
+
+  return pdfDoc.save();
+}
+
+/**
+ * Generates a professional Amenities Bill PDF with branded design.
+ */
+export async function generateAmenityBillPdf(data: AmenityBillPdfData): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  const page = pdfDoc.addPage([WIDTH, HEIGHT]);
+  const margin = MARGIN;
+  const rightEdge = WIDTH - margin;
+
+  const biz = data.business || {
+    name: "BOOKAL", tagline: "Excellence in Event",
+    address: "1/85 Zamin Kottampatti, Pollachi, TN 642123",
+    phone: "+91 88257 02072", email: "bookings@bookal.app", gst: "33AAAAA0000A1Z5",
+  };
+
+  // Branded Header (matching booking receipt style)
+  const headerH = 155;
+  page.drawRectangle({ x: 0, y: HEIGHT - headerH, width: WIDTH, height: headerH, color: COLORS.PRIMARY });
+
+  // Glassy decorative waves
+  [0.12, 0.06, 0.03].forEach((op, i) => {
+    page.drawEllipse({
+      x: WIDTH - (25 * i),
+      y: HEIGHT - (15 * i),
+      xScale: 320 - (i * 50),
+      yScale: 220 - (i * 40),
+      color: COLORS.WHITE,
+      opacity: op,
+    });
+  });
+
+  // Hexagon Logo
+  const logoX = margin + 10;
+  const logoY = HEIGHT - 85;
+  const s = 24;
+  const c30 = 0.866;
+  const s30 = 0.5;
+  const points = [
+    { x: logoX, y: logoY + s },
+    { x: logoX + s * c30, y: logoY + s * s30 },
+    { x: logoX + s * c30, y: logoY - s * s30 },
+    { x: logoX, y: logoY - s },
+    { x: logoX - s * c30, y: logoY - s * s30 },
+    { x: logoX - s * c30, y: logoY + s * s30 },
+  ];
+  for (let i = 0; i < 6; i++) {
+    page.drawLine({ start: points[i], end: points[(i + 1) % 6], thickness: 2.5, color: COLORS.WHITE });
+  }
+  page.drawText("B", { x: logoX - 8, y: logoY - 8, size: 24, font: bold, color: COLORS.WHITE });
+
+  // Brand Name
+  page.drawText(cleanText(biz.name), { x: logoX + 55, y: HEIGHT - 90, size: 42, font: bold, color: COLORS.WHITE });
+  page.drawText(cleanText(biz.tagline), { x: logoX + 58, y: HEIGHT - 110, size: 14, font: regular, color: COLORS.WHITE });
+
+  // Business Details (Right)
+  let bizY = HEIGHT - 50;
+  const drawBizInfo = (text: string, icon: string) => {
+    if (!text) return;
+    drawIcon(page, icon, rightEdge - 170, bizY + 4, 11, COLORS.ACCENT);
+    page.drawText(cleanText(text), { x: rightEdge - 155, y: bizY, size: 9.5, font: regular, color: COLORS.WHITE });
+    bizY -= 18;
+  };
+  drawBizInfo(biz.address, "pin");
+  drawBizInfo(biz.phone, "phone");
+  drawBizInfo(biz.email, "mail");
+  if (biz.gst) drawBizInfo(`GST: ${biz.gst}`, "document");
+
+  // Bill ID badge
+  const idText = `Bill #${data.billId.slice(0, 8).toUpperCase()}`;
+  const idW = bold.widthOfTextAtSize(idText, 9);
+  page.drawRectangle({ x: rightEdge - idW - 20, y: HEIGHT - 135, width: idW + 20, height: 20, color: COLORS.ACCENT });
+  page.drawText(idText, { x: rightEdge - idW - 10, y: HEIGHT - 129, size: 9, font: bold, color: COLORS.WHITE });
+
+  // Amenity Bill Title below header
+  page.drawText("AMENITIES BILL", { x: margin, y: HEIGHT - 190, size: 20, font: bold, color: COLORS.TEXT_DARK });
+  page.drawText(`Booking: ${data.bookingRef}  |  ${data.customerName}`, {
+    x: margin, y: HEIGHT - 210, size: 10, font: regular, color: COLORS.TEXT_MUTED,
+  });
+
+  // Date
+  let y = HEIGHT - 260;
+  page.drawText(`Date: ${new Date(data.bookingDate + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`, {
+    x: margin, y, size: 10, font: regular, color: COLORS.TEXT_MUTED,
+  });
+  y -= 15;
+  page.drawText(`Generated: ${new Date(data.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`, {
+    x: margin, y, size: 9, font: regular, color: COLORS.TEXT_MUTED,
+  });
+
+  // Payment Status Badge
+  y -= 25;
+  const payStatusText = data.isPaid ? "PAID" : "UNPAID";
+  const payStatusColor = data.isPaid ? COLORS.SUCCESS : COLORS.ACCENT;
+  const payStatusW = bold.widthOfTextAtSize(payStatusText, 10);
+  page.drawRectangle({ x: margin, y: y - 2, width: payStatusW + 20, height: 18, color: payStatusColor, opacity: 0.15 });
+  page.drawText(payStatusText, { x: margin + 10, y: y + 2, size: 10, font: bold, color: payStatusColor });
+
+  // Items Table
+  y -= 40;
+  page.drawRectangle({ x: margin, y: y - 22, width: rightEdge - margin, height: 22, color: COLORS.BG_LIGHT });
+  page.drawText("Item Description", { x: margin + 12, y: y - 15, size: 10, font: bold, color: COLORS.ACCENT });
+  page.drawText("Amount (Rs.)", { x: rightEdge - 90, y: y - 15, size: 10, font: bold, color: COLORS.ACCENT });
+  y -= 32;
+
+  data.items.forEach((item, i) => {
+    if (y < 200) {
+      y = HEIGHT - 190;
+    }
+    if (i % 2 === 1) {
+      page.drawRectangle({ x: margin + 4, y: y - 7, width: rightEdge - margin - 8, height: 20, color: COLORS.BG_LIGHT, opacity: 0.5 });
+    }
+    page.drawText(cleanText(item.name), { x: margin + 12, y, size: 11, font: regular, color: COLORS.TEXT_DARK });
+    const amtText = `Rs. ${item.amount.toLocaleString("en-IN")}`;
+    const amtW = bold.widthOfTextAtSize(amtText, 11);
+    page.drawText(amtText, { x: rightEdge - amtW - 12, y, size: 11, font: bold, color: COLORS.TEXT_DARK });
+    y -= 22;
+    drawLine(page, margin + 12, y + 20, rightEdge - 12, y + 20, 0.5, COLORS.BORDER);
+  });
+
+  // Total
+  y -= 10;
+  drawLine(page, margin, y + 20, rightEdge, y + 20, 1.5, COLORS.ACCENT);
+  y -= 5;
+  const totalText = `TOTAL: Rs. ${data.totalAmount.toLocaleString("en-IN")}`;
+  const totalW = bold.widthOfTextAtSize(totalText, 20);
+  page.drawText(totalText, { x: rightEdge - totalW - 12, y: y - 5, size: 20, font: bold, color: COLORS.PRIMARY });
+
+  // Notes
+  if (data.notes?.trim()) {
+    y -= 50;
+    page.drawText("Notes:", { x: margin, y, size: 10, font: bold, color: COLORS.TEXT_MUTED });
+    y -= 18;
+    const lines = wrapText(data.notes, rightEdge - margin - 20, regular, 10);
+    lines.forEach((line) => {
+      page.drawText(cleanText(line), { x: margin + 12, y, size: 10, font: regular, color: COLORS.TEXT_MUTED });
+      y -= 15;
+    });
+  }
+
+  // Business footer
+  y = Math.min(y - 20, 100);
+  drawLine(page, margin, y, rightEdge, y, 0.5, COLORS.BORDER);
+  y -= 18;
+  page.drawText(cleanText(biz.name), { x: margin, y, size: 9, font: bold, color: COLORS.TEXT_MUTED });
+  page.drawText(`${cleanText(biz.phone)}  |  ${cleanText(biz.email)}`, {
+    x: margin + 150, y, size: 8, font: regular, color: COLORS.TEXT_MUTED,
+  });
+  if (biz.gst) {
+    y -= 14;
+    page.drawText(`GST: ${biz.gst}`, { x: margin, y, size: 8, font: regular, color: COLORS.TEXT_MUTED });
+  }
+
+  // Watermark
+  const wmText = "BOOKAL";
+  const wmW = bold.widthOfTextAtSize(wmText, 60);
+  page.drawText(wmText, {
+    x: (WIDTH - wmW) / 2, y: HEIGHT / 2 - 30,
+    size: 60, font: bold, color: COLORS.BORDER, opacity: 0.06, rotate: degrees(45),
+  });
+
+  if (data.isPaid) {
+    const paidText = "PAID";
+    const paidW = bold.widthOfTextAtSize(paidText, 100);
+    page.drawText(paidText, {
+      x: WIDTH - 180,
+      y: 250,
+      size: 100,
+      font: bold,
+      color: COLORS.SUCCESS,
+      opacity: 0.1,
+      rotate: degrees(15),
+    });
+  }
 
   return pdfDoc.save();
 }

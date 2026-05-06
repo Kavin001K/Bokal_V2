@@ -662,6 +662,8 @@ components:
       properties:
         token:
           type: string
+        refreshToken:
+          type: string
         user:
           $ref: "#/components/schemas/AuthUser"
       required:
