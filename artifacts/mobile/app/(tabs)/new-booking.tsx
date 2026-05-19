@@ -24,12 +24,13 @@ import { ActivityIndicator,
 import * as WebBrowser from "expo-web-browser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import StepIndicator from "@/components/StepIndicator";
+import TamilDatePicker from "@/components/TamilDatePicker";
 import VenueCard from "@/components/VenueCard";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { getApiBaseUrl } from "@/lib/apiBaseUrl";
 import {
-  TAMIL_MONTHS,
   formatEnglishDate,
   gregorianToTamil,
   tamilToGregorian,
@@ -102,13 +103,19 @@ const DEFAULT_FORM: FormState = {
 
 export default function NewBookingScreen() {
   const colors = useColors();
+  const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const { token } = useAuth();
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const [createdBooking, setCreatedBooking] = useState<{ bookingRef: string; totalAmount: number; customerName: string } | null>(null);
+  const [createdBooking, setCreatedBooking] = useState<{
+    id: string;
+    bookingRef: string;
+    totalAmount: number;
+    customerName: string;
+  } | null>(null);
 
   const { data: venuesData } = useGetVenues({ query: { queryKey: ["venues"] } });
   const venues = venuesData ?? [];
@@ -171,7 +178,7 @@ export default function NewBookingScreen() {
     if (!createdBooking) return;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const pdfUrl = `${getApiBaseUrl()}/api/bookings/${createdBooking.bookingRef}/pdf?token=${token}`;
+      const pdfUrl = `${getApiBaseUrl()}/api/bookings/${createdBooking.id}/pdf?token=${token}`;
       
       await WebBrowser.openBrowserAsync(pdfUrl, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
@@ -211,7 +218,12 @@ export default function NewBookingScreen() {
   const createMutation = useCreateBooking({
     mutation: {
       onSuccess: (data) => {
-        setCreatedBooking({ bookingRef: data.bookingRef, totalAmount: data.totalAmount, customerName: data.customerName });
+        setCreatedBooking({
+          id: data.id,
+          bookingRef: data.bookingRef,
+          totalAmount: data.totalAmount,
+          customerName: data.customerName,
+        });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       },
       onError: (err: { data?: { error?: string } }) => {
@@ -512,7 +524,7 @@ export default function NewBookingScreen() {
                 onPress={() => updateField("tamilDateMode", false)}
               >
                 <Text style={[styles.dateToggleText, { color: !form.tamilDateMode ? colors.primary : colors.textMuted }]}>
-                  English
+                  {t("english")}
                 </Text>
               </Pressable>
               <Pressable
@@ -520,7 +532,7 @@ export default function NewBookingScreen() {
                 onPress={() => updateField("tamilDateMode", true)}
               >
                 <Text style={[styles.dateToggleText, { color: form.tamilDateMode ? colors.primary : colors.textMuted }]}>
-                  தமிழ்
+                  {t("tamil")}
                 </Text>
               </Pressable>
             </View>
@@ -536,11 +548,11 @@ export default function NewBookingScreen() {
                 <View style={styles.calLegend}>
                   <View style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: colors.destructive }]} />
-                    <Text style={[styles.legendText, { color: colors.textSecondary }]}>Occupied (1+ Booking)</Text>
+                    <Text style={[styles.legendText, { color: colors.textSecondary }]}>{t("calendarOccupied")}</Text>
                   </View>
                   <View style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
-                    <Text style={[styles.legendText, { color: colors.textSecondary }]}>Selected</Text>
+                    <Text style={[styles.legendText, { color: colors.textSecondary }]}>{t("calendarSelected")}</Text>
                   </View>
                 </View>
                 <View style={[styles.tamilNote, { backgroundColor: colors.secondary }]}>
@@ -551,59 +563,20 @@ export default function NewBookingScreen() {
                 </View>
               </View>
             ) : (
-              <View>
-                <FormField label="Tamil Month">
-                  <View style={styles.pickerWrap}>
-                    <ScrollView style={styles.pickerScroll} showsVerticalScrollIndicator={false}>
-                      {TAMIL_MONTHS.map((m) => (
-                        <Pressable
-                          key={m}
-                          style={[styles.pickerItem, form.tamilMonth === m && { backgroundColor: colors.primary + "20" }]}
-                          onPress={() => handleTamilDateChange(m, form.tamilDateNum, form.tamilYear)}
-                        >
-                          <Text style={[styles.pickerItemText, { color: form.tamilMonth === m ? colors.primary : colors.textPrimary }]}>
-                            {m}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
-                </FormField>
-                <View style={styles.tamilDateRow}>
-                  <FormField label="Date" style={{ flex: 1 }}>
-                    <View style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: 8 }]}>
-                      <Pressable onPress={() => handleTamilDateChange(form.tamilMonth, Math.max(1, form.tamilDateNum - 1), form.tamilYear)}>
-                        <Feather name="minus" size={16} color={colors.primary} />
-                      </Pressable>
-                      <Text style={{ flex: 1, textAlign: "center", color: colors.textPrimary, fontSize: 16, fontWeight: "700" as const }}>
-                        {form.tamilDateNum}
-                      </Text>
-                      <Pressable onPress={() => handleTamilDateChange(form.tamilMonth, Math.min(30, form.tamilDateNum + 1), form.tamilYear)}>
-                        <Feather name="plus" size={16} color={colors.primary} />
-                      </Pressable>
-                    </View>
-                  </FormField>
-                  <FormField label="Year" style={{ flex: 1 }}>
-                    <View style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: 8 }]}>
-                      <Pressable onPress={() => handleTamilDateChange(form.tamilMonth, form.tamilDateNum, form.tamilYear - 1)}>
-                        <Feather name="minus" size={16} color={colors.primary} />
-                      </Pressable>
-                      <Text style={{ flex: 1, textAlign: "center", color: colors.textPrimary, fontSize: 16, fontWeight: "700" as const }}>
-                        {form.tamilYear}
-                      </Text>
-                      <Pressable onPress={() => handleTamilDateChange(form.tamilMonth, form.tamilDateNum, form.tamilYear + 1)}>
-                        <Feather name="plus" size={16} color={colors.primary} />
-                      </Pressable>
-                    </View>
-                  </FormField>
-                </View>
-                <View style={[styles.tamilNote, { backgroundColor: colors.secondary }]}>
-                  <Feather name="calendar" size={13} color={colors.primary} />
-                  <Text style={[styles.tamilNoteText, { color: colors.textSecondary }]}>
-                    English: {formatEnglishDate(form.bookingDate)}
-                  </Text>
-                </View>
-              </View>
+              <TamilDatePicker
+                month={form.tamilMonth}
+                day={form.tamilDateNum}
+                year={form.tamilYear}
+                gregorianDate={form.bookingDate}
+                onChange={handleTamilDateChange}
+                colors={colors}
+                labels={{
+                  month: t("tamilMonthLabel"),
+                  day: t("tamilDayLabel"),
+                  year: t("tamilYearLabel"),
+                  englishEquivalent: t("english"),
+                }}
+              />
             )}
 
             <View style={styles.timeRow}>
@@ -748,7 +721,7 @@ export default function NewBookingScreen() {
 
             <ReviewSection title="Date & Time" colors={colors}>
               <ReviewRow label="Date" value={formatEnglishDate(form.bookingDate)} colors={colors} />
-              <ReviewRow label="Tamil Date" value={tamilDate.display} colors={colors} />
+              <ReviewRow label={t("tamilDate")} value={tamilDate.display} colors={colors} />
               <ReviewRow label="Time" value={`${formatTime(form.startTime)} – ${formatTime(form.endTime)} (${durationHours}h)`} colors={colors} />
             </ReviewSection>
 

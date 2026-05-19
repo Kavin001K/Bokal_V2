@@ -343,6 +343,9 @@ export default function BookingDetailScreen() {
             <View>
               <Text style={styles.heroRef}>{booking.bookingRef}</Text>
               <Text style={styles.heroDate}>{formatEnglishDate(booking.bookingDate)}</Text>
+              {booking.tamilDateLabel ? (
+                <Text style={styles.heroTamilDate}>{booking.tamilDateLabel}</Text>
+              ) : null}
             </View>
             <View style={[styles.statusBadge, { backgroundColor: isCancelled ? "#EF4444" : isPaid ? "#10B981" : "#F59E0B" }]}>
               <Text style={styles.statusText}>{isCancelled ? t("cancelled") : isPaid ? t("paid") : t("pending")}</Text>
@@ -408,6 +411,15 @@ export default function BookingDetailScreen() {
         {/* Event Schedule */}
         <View style={[styles.section, { backgroundColor: colors.card }]}>
           <Text style={styles.sectionTitle}>{t("eventSchedule")}</Text>
+          {booking.tamilDateLabel ? (
+            <View style={styles.detailItem}>
+              <Feather name="calendar" size={16} color="#A89080" />
+              <View style={styles.detailText}>
+                <Text style={styles.detailLabel}>{t("tamilDate")}</Text>
+                <Text style={styles.detailValue}>{booking.tamilDateLabel}</Text>
+              </View>
+            </View>
+          ) : null}
           <View style={styles.detailItem}>
             <Feather name="clock" size={16} color="#A89080" />
             <View style={styles.detailText}>
@@ -673,6 +685,7 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
   heroRef: { fontSize: 22, fontWeight: "900", letterSpacing: -0.5, color: "#1A1209" },
   heroDate: { fontSize: 14, color: "#6B5744", marginTop: 2 },
+  heroTamilDate: { fontSize: 13, color: "#8B7355", marginTop: 4, fontFamily: Platform.OS === "ios" ? "Tamil Sangam MN" : undefined },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
   statusText: { fontSize: 10, fontWeight: "900", color: "#FFF" },
   heroAmount: { borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.05)", paddingTop: 15 },

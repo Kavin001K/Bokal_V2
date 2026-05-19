@@ -210,6 +210,12 @@ const STRINGS = {
     endTimeAfterStart: "End time must be after start time",
     conflictError: "Venue is already booked for this time slot",
     hours: "hours",
+    tamilDate: "Tamil Date",
+    tamilMonthLabel: "Tamil Month",
+    tamilDayLabel: "Day",
+    tamilYearLabel: "Year",
+    calendarOccupied: "Occupied (1+ booking)",
+    calendarSelected: "Selected",
 
     // --- Manage venues ---
     manageVenuesTitle: "Manage Venues",
@@ -473,6 +479,12 @@ const STRINGS = {
     endTimeAfterStart: "முடிவு நேரம் தொடக்க நேரத்திற்கு பிறகு இருக்க வேண்டும்",
     conflictError: "இந்த நேர இடைவெளியில் இடம் ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது",
     hours: "மணி",
+    tamilDate: "தமிழ் தேதி",
+    tamilMonthLabel: "தமிழ் மாதம்",
+    tamilDayLabel: "நாள்",
+    tamilYearLabel: "ஆண்டு",
+    calendarOccupied: "நிரம்பியது (1+ முன்பதிவு)",
+    calendarSelected: "தேர்ந்தெடுக்கப்பட்டது",
 
     // --- Manage venues ---
     manageVenuesTitle: "இடங்களை நிர்வகி",

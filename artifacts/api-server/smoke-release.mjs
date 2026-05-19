@@ -6,7 +6,7 @@
  * - Generate booking PDF
  */
 
-const domain = process.env.SMOKE_BASE_URL ?? process.env.EXPO_PUBLIC_DOMAIN ?? "bookal.onrender.com";
+const domain = process.env.SMOKE_BASE_URL ?? process.env.EXPO_PUBLIC_DOMAIN ?? "backend.bookal.kavin.cyou";
 const baseUrl = domain.startsWith("http://") || domain.startsWith("https://")
   ? domain
   : `https://${domain}`;

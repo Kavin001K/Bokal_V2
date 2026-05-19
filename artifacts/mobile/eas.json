@@ -17,7 +17,7 @@
       "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "bookal.onrender.com",
+        "EXPO_PUBLIC_DOMAIN": "backend.bookal.kavin.cyou",
         "EXPO_PUBLIC_SUPABASE_URL": "https://dbwcgbnowoabwkztfmqi.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_3seX0N-C1FSZrTYpRNpSqw_WaqUaMZi"
       },

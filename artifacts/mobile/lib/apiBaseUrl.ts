@@ -26,5 +26,5 @@ export function getApiBaseUrl(): string {
     }
   }
 
-  return "https://bookal.onrender.com";
+  return "https://backend.bookal.kavin.cyou";
 }

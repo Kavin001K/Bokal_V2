@@ -11,9 +11,18 @@ const TAMIL_MONTHS = [
   "தை",
   "மாசி",
   "பங்குனி",
-];
+] as const;
 
 export { TAMIL_MONTHS };
+
+const TAMIL_NUMERALS = ["௦", "௧", "௨", "௩", "௪", "௫", "௬", "௭", "௮", "௯"] as const;
+
+export function toTamilNumeral(n: number): string {
+  return String(n)
+    .split("")
+    .map((d) => TAMIL_NUMERALS[Number(d)] ?? d)
+    .join("");
+}
 
 const MONTH_START: Record<number, Record<string, string>> = {
   2024: {
@@ -72,12 +81,67 @@ const MONTH_START: Record<number, Record<string, string>> = {
     மாசி: "2028-02-13",
     பங்குனி: "2028-03-14",
   },
+  2028: {
+    சித்திரை: "2028-04-14",
+    வைகாசி: "2028-05-15",
+    ஆனி: "2028-06-15",
+    ஆடி: "2028-07-16",
+    ஆவணி: "2028-08-17",
+    புரட்டாசி: "2028-09-17",
+    ஐப்பசி: "2028-10-18",
+    கார்த்திகை: "2028-11-16",
+    மார்கழி: "2028-12-16",
+    தை: "2029-01-14",
+    மாசி: "2029-02-13",
+    பங்குனி: "2029-03-14",
+  },
+  2029: {
+    சித்திரை: "2029-04-14",
+    வைகாசி: "2029-05-15",
+    ஆனி: "2029-06-15",
+    ஆடி: "2029-07-16",
+    ஆவணி: "2029-08-17",
+    புரட்டாசி: "2029-09-17",
+    ஐப்பசி: "2029-10-18",
+    கார்த்திகை: "2029-11-16",
+    மார்கழி: "2029-12-16",
+    தை: "2030-01-14",
+    மாசி: "2030-02-13",
+    பங்குனி: "2030-03-14",
+  },
+  2030: {
+    சித்திரை: "2030-04-14",
+    வைகாசி: "2030-05-15",
+    ஆனி: "2030-06-15",
+    ஆடி: "2030-07-16",
+    ஆவணி: "2030-08-17",
+    புரட்டாசி: "2030-09-17",
+    ஐப்பசி: "2030-10-18",
+    கார்த்திகை: "2030-11-16",
+    மார்கழி: "2030-12-16",
+    தை: "2031-01-14",
+    மாசி: "2031-02-13",
+    பங்குனி: "2031-03-14",
+  },
 };
 
-function getTamilYear(d: Date): number {
+const LOOKUP_YEARS = Object.keys(MONTH_START).map(Number).sort((a, b) => a - b);
+const DEFAULT_LOOKUP_YEAR = 2026;
+
+function getLookupYearForGregorian(gregYear: number): number {
+  if (MONTH_START[gregYear]) return gregYear;
+  if (gregYear < LOOKUP_YEARS[0]!) return LOOKUP_YEARS[0]!;
+  if (gregYear > LOOKUP_YEARS[LOOKUP_YEARS.length - 1]!) {
+    return LOOKUP_YEARS[LOOKUP_YEARS.length - 1]!;
+  }
+  return DEFAULT_LOOKUP_YEAR;
+}
+
+/** Tamil calendar year (e.g. 2083 for Gregorian 2025 after Chithirai). */
+export function getTamilYear(d: Date): number {
   const year = d.getFullYear();
   const tamilNewYear = new Date(year, 3, 14);
-  return d >= tamilNewYear ? year + 31 : year + 30;
+  return d >= tamilNewYear ? year + 58 : year + 57;
 }
 
 export interface TamilDate {
@@ -87,16 +151,12 @@ export interface TamilDate {
   display: string;
 }
 
-export function gregorianToTamil(dateStr: string): TamilDate {
-  const target = new Date(dateStr + "T00:00:00");
+function findTamilMonthDay(target: Date): { month: string; date: number } | null {
   const gregYear = target.getFullYear();
-  const tamilYear = getTamilYear(target);
-
   const yearsToCheck = [gregYear - 1, gregYear, gregYear + 1];
-  let found: { month: string; date: number } | null = null;
 
   for (const yr of yearsToCheck) {
-    const yearData = MONTH_START[yr] ?? MONTH_START[2026]!;
+    const yearData = MONTH_START[getLookupYearForGregorian(yr)] ?? MONTH_START[DEFAULT_LOOKUP_YEAR]!;
     const monthEntries = Object.entries(yearData);
 
     for (let i = 0; i < monthEntries.length; i++) {
@@ -114,16 +174,28 @@ export function gregorianToTamil(dateStr: string): TamilDate {
       if (target >= startDate && target < endDate) {
         const diffMs = target.getTime() - startDate.getTime();
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        found = { month, date: diffDays + 1 };
-        break;
+        return { month, date: diffDays + 1 };
       }
     }
-    if (found) break;
   }
 
+  return null;
+}
+
+export function gregorianToTamil(dateStr: string): TamilDate {
+  const target = new Date(dateStr + "T00:00:00");
+  const tamilYear = getTamilYear(target);
+  const found = findTamilMonthDay(target);
+
   if (!found) {
-    const approxMonth = TAMIL_MONTHS[target.getMonth()] ?? "சித்திரை";
-    found = { month: approxMonth, date: target.getDate() };
+    const approxMonth = TAMIL_MONTHS[target.getMonth()] ?? TAMIL_MONTHS[0];
+    const fallback = { month: approxMonth, date: target.getDate() };
+    return {
+      tamilDate: fallback.date,
+      tamilMonth: fallback.month,
+      tamilYear,
+      display: `${fallback.month} ${fallback.date}, ${tamilYear}`,
+    };
   }
 
   return {
@@ -134,29 +206,62 @@ export function gregorianToTamil(dateStr: string): TamilDate {
   };
 }
 
+export function getDaysInTamilMonth(tamilMonth: string, tamilYear: number): number {
+  const gregCandidates = [tamilYear - 58, tamilYear - 57, tamilYear - 56, tamilYear - 55];
+
+  for (const gregYear of gregCandidates) {
+    const yearData = MONTH_START[getLookupYearForGregorian(gregYear)];
+    if (!yearData) continue;
+
+    const startStr = yearData[tamilMonth];
+    if (!startStr) continue;
+
+    const monthIdx = TAMIL_MONTHS.indexOf(tamilMonth as (typeof TAMIL_MONTHS)[number]);
+    const nextMonth = TAMIL_MONTHS[monthIdx + 1];
+    const startDate = new Date(startStr + "T00:00:00");
+
+    if (nextMonth && yearData[nextMonth]) {
+      const endDate = new Date(yearData[nextMonth] + "T00:00:00");
+      return Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)));
+    }
+
+    return 32;
+  }
+
+  return 30;
+}
+
+/** Tamil years for picker: current ± 3 years in Tamil calendar. */
+export function getTamilYearOptions(): number[] {
+  const current = getTamilYear(new Date());
+  return [current - 1, current, current + 1, current + 2, current + 3];
+}
+
 export function tamilToGregorian(
   tamilMonth: string,
   tamilDate: number,
   tamilYear: number
 ): string {
-  const gregYear = tamilYear + 56;
-  const yearsToCheck = [gregYear - 1, gregYear, gregYear + 1];
+  const gregCandidates = [tamilYear - 58, tamilYear - 57, tamilYear - 56];
 
-  for (const yr of yearsToCheck) {
-    const yearData = MONTH_START[yr] ?? MONTH_START[2026]!;
+  for (const gregYear of gregCandidates) {
+    const yearData = MONTH_START[getLookupYearForGregorian(gregYear)];
+    if (!yearData) continue;
+
     const startStr = yearData[tamilMonth];
     if (!startStr) continue;
+
     const startDate = new Date(startStr + "T00:00:00");
-    const result = new Date(
-      startDate.getTime() + (tamilDate - 1) * 24 * 60 * 60 * 1000
-    );
+    const maxDays = getDaysInTamilMonth(tamilMonth, tamilYear);
+    const safeDay = Math.min(Math.max(1, tamilDate), maxDays);
+    const result = new Date(startDate.getTime() + (safeDay - 1) * 24 * 60 * 60 * 1000);
     const y = result.getFullYear();
     const m = String(result.getMonth() + 1).padStart(2, "0");
     const d = String(result.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
 
-  return new Date().toISOString().split("T")[0]!;
+  return todayStr();
 }
 
 export function formatEnglishDate(dateStr: string): string {

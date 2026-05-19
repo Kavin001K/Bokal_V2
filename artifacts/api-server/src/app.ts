@@ -32,7 +32,7 @@ app.use(
   }),
 );
 
-const allowedOrigins = (process.env.CORS_ORIGINS ?? "https://bookal-erp-v123.web.app,https://bookal-erp-v123.firebaseapp.com,https://bookal.onrender.com")
+const allowedOrigins = (process.env.CORS_ORIGINS ?? "https://bookal-erp-v123.web.app,https://bookal-erp-v123.firebaseapp.com,https://bookal.onrender.com,https://backend.bookal.kavin.cyou")
   .split(",")
   .map((v) => v.trim())
   .filter(Boolean);
@@ -74,22 +74,28 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
 
-// Render Health Check
-app.get("/health", (req, res) => res.status(200).send("OK"));
+// Render / load-balancer health checks (GET and HEAD)
+const rootPayload = {
+  status: "online",
+  message: "Bookal API is live",
+  version: "1.0.0",
+  endpoints: {
+    health: "/health",
+    apiHealth: "/api/healthz",
+    auth: "/api/auth",
+    bookings: "/api/bookings",
+  },
+} as const;
+
+app.get("/health", (_req, res) => res.status(200).send("OK"));
+app.head("/health", (_req, res) => res.status(200).end());
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (_req, res) => {
-  res.json({
-    status: "online",
-    message: "Bookal API is live",
-    version: "1.0.0",
-    endpoints: {
-      health: "/api/healthz",
-      auth: "/api/auth",
-      bookings: "/api/bookings",
-      test: "/api/test/pdf-test"
-    },
-  });
+  res.json(rootPayload);
+});
+app.head("/", (_req, res) => {
+  res.status(200).end();
 });
 
 import { db, bookingsTable } from "@workspace/db";
